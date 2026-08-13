@@ -411,11 +411,12 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
 
     full_messages = [system_message] + messages
 
-    # PASS 1: Native Chat Completion API
+    # PASS 1: Grammar-constrained to enforce JSON format
     response_pass1 = llm.create_chat_completion(
         messages=full_messages,
         max_tokens=512,
         temperature=0.0,
+        grammar=get_response_grammar(),
         stop=["<|im_end|>", "<|im_start|>"]
     )
     text_pass1 = response_pass1["choices"][0]["message"]["content"].strip()
