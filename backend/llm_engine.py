@@ -133,30 +133,53 @@ def detect_language_instruction(user_text: str) -> str:
     return "The user is speaking standard English. Respond ONLY in standard professional English."
 
 
+def get_text_grammar() -> LlamaGrammar:
+    """Grammar that forces plain text - no JSON, no brackets."""
+    grammar_text = r'''
+    text ::= [a-zA-Z0-9 .,!?\'"-]+
+    '''
+    return LlamaGrammar.from_json_schema('{"type": "string"}')
+
+
+_text_grammar_instance = None
+
+
+def get_text_only_grammar() -> LlamaGrammar:
+    global _text_grammar_instance
+    if _text_grammar_instance is None:
+        _text_grammar_instance = get_text_grammar()
+    return _text_grammar_instance
+
+
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Pass 3: Pure data extraction. No schemas, no history, no JSON instructions."""
+    """Pass 3: Pure data extraction. Use grammar to force natural language."""
     system_prompt = {
         "role": "system",
         "content": (
-            "You are an expert agricultural AI assistant.\n"
-            f"{lang_directive}\n"
-            "Your task is to answer the user's question using ONLY the provided reference material.\n"
-            "Provide a direct, natural response. Do not echo or repeat the reference material verbatim. Do not output JSON."
+            "You are FarmHand AI. Answer the farmer's question in plain English.\n"
+            f"{lang_directive}\n\n"
+            "Write 1-3 sentences. Do not use brackets or code."
         )
     }
 
     user_prompt = {
         "role": "user",
-        "content": f"Reference Material:\n{context_data}\n\nQuestion: {user_question}"
+        "content": f"Context: {context_data}\n\nQuestion: {user_question}\n\nAnswer:"
     }
 
     response = llm.create_chat_completion(
         messages=[system_prompt, user_prompt],
-        max_tokens=512,
-        temperature=0.1,
-        stop=["<|im_end|>", "<|im_start|>"]
+        max_tokens=384,
+        temperature=0.2,
+        grammar=get_text_only_grammar(),
+        stop=["<|im_end|>", "<|im_start|>", "[", "{"]
     )
-    return response["choices"][0]["message"]["content"].strip()
+    raw_output = response["choices"][0]["message"]["content"].strip()
+
+    if raw_output.startswith("[") or raw_output.startswith("{"):
+        return "I found relevant information but had trouble formatting it. Could you rephrase your question?"
+
+    return raw_output
 
 
 def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm") -> str:

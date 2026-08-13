@@ -145,7 +145,7 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
     Tool function executed by tool_registry.
     Performs vector search, constructs strict prompt context, and returns retrieval output.
     """
-    chunks = search_knowledge_base("chicken feed", top_k=top_k)
+    chunks = search_knowledge_base(search_query, top_k=top_k)
 
     if not chunks:
         return {
