@@ -229,26 +229,26 @@ def get_text_only_grammar() -> LlamaGrammar:
 
 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Pass 3: Pure data extraction. Use stop tokens to prevent JSON output."""
+    """Pass 3: Pure data extraction. Post-process to strip any JSON."""
     system_prompt = {
         "role": "system",
         "content": (
             "You are FarmHand AI. Answer the farmer's question in plain English.\n"
             f"{lang_directive}\n\n"
-            "Write 1-3 sentences. Do not output JSON or use brackets."
+            "Write 1-3 clear sentences answering the question. Do not output JSON."
         )
     }
 
     user_prompt = {
         "role": "user",
-        "content": f"Context: {context_data}\n\nQuestion: {user_question}\n\nAnswer:"
+        "content": f"Reference material:\n{context_data}\n\nQuestion: {user_question}"
     }
 
     response = llm.create_chat_completion(
         messages=[system_prompt, user_prompt],
         max_tokens=512,
-        temperature=0.2,
-        stop=["<|im_end|>", "<|im_start|>", "[", "{"]
+        temperature=0.3,
+        stop=["<|im_end|>", "<|im_start|>"]
     )
     raw_output = response["choices"][0]["message"]["content"].strip()
 
