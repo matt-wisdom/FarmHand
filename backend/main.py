@@ -311,7 +311,7 @@ def chat_endpoint(payload: ChatRequest):
 
     # 3. Process LLM completion with farm_id context
     try:
-        assistant_response = chat_completion(messages, farm_id=farm_id)
+        assistant_response = chat_completion(messages, farm_id=farm_id, thread_id=thread_id)
     except Exception as e:
         logger.error(f"Error in chat_completion: {e}")
         assistant_response = f"Internal system error: {str(e)}"

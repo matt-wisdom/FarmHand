@@ -26,6 +26,83 @@ GREETING_KEYWORDS = {
     "how far", "habari", "sannu", "kedu", "greeting", "greetings"
 }
 
+COMPRESSION_THRESHOLD = 3000
+COMPRESSION_TARGET = 1000
+
+_thread_token_counts: Dict[str, int] = {}
+
+
+def estimate_tokens(text: str) -> int:
+    return len(text) // 4
+
+
+def extractive_summary(messages: List[Dict], max_tokens: int = COMPRESSION_TARGET) -> str:
+    """Extract key sentences using TF-IDF-like scoring."""
+    all_text = ""
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        all_text += f"{role}: {content}\n"
+
+    sentences = all_text.replace("\n", ". ").split(". ")
+    if len(sentences) <= 4:
+        return all_text
+
+    scored = []
+    for sent in sentences:
+        if len(sent) < 10:
+            continue
+        score = len(sent) // 10
+        for other in sentences:
+            if sent != other and sent in other:
+                score -= 1
+        scored.append((score, sent))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    selected = [s for _, s in scored[:6]]
+    selected.sort(key=lambda s: all_text.find(s))
+
+    summary = ". ".join(selected)
+    if len(summary) > max_tokens * 4:
+        summary = summary[:max_tokens * 4]
+    return summary
+
+
+def compress_thread_messages(messages: List[Dict], thread_id: str) -> List[Dict]:
+    """Compress conversation history, prepend summary to system prompt."""
+    if not messages:
+        return messages
+
+    has_system = messages[0].get("role") == "system"
+    if has_system and len(messages) <= 4:
+        return messages
+
+    summary = extractive_summary(messages[1:] if has_system else messages)
+
+    new_messages = []
+    if has_system:
+        original_system = messages[0]
+        new_system = {
+            "role": "system",
+            "content": original_system["content"]
+            + f"\n\n[Prior conversation summary: {summary}]"
+        }
+        new_messages.append(new_system)
+    else:
+        new_messages.append({
+            "role": "system",
+            "content": f"[Prior conversation summary: {summary}]"
+        })
+
+    last_4 = messages[-4:] if len(messages) > 4 else messages
+    for m in last_4:
+        if has_system and m == messages[0]:
+            continue
+        new_messages.append(m)
+
+    print(f"[llm_engine] Compressed thread {thread_id[:8]}: {len(messages)} → {len(new_messages)} messages")
+    return new_messages
+
 
 def build_tools_json_schema() -> Dict[str, Any]:
     tool_names = list(TOOL_MAP.keys())
@@ -152,13 +229,13 @@ def get_text_only_grammar() -> LlamaGrammar:
 
 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Pass 3: Pure data extraction. Use grammar to force natural language."""
+    """Pass 3: Pure data extraction. Use stop tokens to prevent JSON output."""
     system_prompt = {
         "role": "system",
         "content": (
             "You are FarmHand AI. Answer the farmer's question in plain English.\n"
             f"{lang_directive}\n\n"
-            "Write 1-3 sentences. Do not use brackets or code."
+            "Write 1-3 sentences. Do not output JSON or use brackets."
         )
     }
 
@@ -169,20 +246,31 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
 
     response = llm.create_chat_completion(
         messages=[system_prompt, user_prompt],
-        max_tokens=384,
+        max_tokens=512,
         temperature=0.2,
-        grammar=get_text_only_grammar(),
         stop=["<|im_end|>", "<|im_start|>", "[", "{"]
     )
     raw_output = response["choices"][0]["message"]["content"].strip()
 
     if raw_output.startswith("[") or raw_output.startswith("{"):
-        return "I found relevant information but had trouble formatting it. Could you rephrase your question?"
+        return "Error: Failed to process knowledge base response. Please rephrase your question."
 
     return raw_output
 
 
-def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm") -> str:
+def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: str = None) -> str:
+    global _thread_token_counts
+
+    if thread_id:
+        total_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
+        if total_tokens > COMPRESSION_THRESHOLD:
+            messages = compress_thread_messages(messages, thread_id)
+            new_total = sum(estimate_tokens(m.get("content", "")) for m in messages)
+            _thread_token_counts[thread_id] = new_total
+            print(f"[llm_engine] Compressed thread {thread_id[:8]}: {total_tokens} → {new_total} tokens")
+        else:
+            _thread_token_counts[thread_id] = total_tokens
+
     llm = get_llm()
     if llm is None:
         return mock_router(messages)
@@ -267,9 +355,13 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         if rag_context_prompt:
             if not retrieved_chunks:
                 return "I couldn't find any relevant information in the knowledge base to answer your question."
-            
+
             rag_text = generate_stateless_answer(llm, rag_context_prompt, last_user_prompt, lang_directive)
-            print(f"[llm_engine] RAG stateless output: {rag_text}")
+            print(f"[llm_engine] RAG stateless output: {rag_text[:100] if rag_text else '(empty)'}...")
+
+            if not rag_text or len(rag_text.strip()) < 10:
+                return "Error processing knowledge base response. Please rephrase your question."
+
             return sanitize_response(rag_text)
 
         # PASS 3: Database Stateless Extraction
