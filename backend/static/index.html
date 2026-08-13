@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FarmHand AI - Multi-Farm Edge System</title>
+
+  <!-- Offline-capable: System font stack -->
+  <style>
+    :root {
+      --font-primary: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-display: "Plus Jakarta Sans", "Outfit", var(--font-primary);
+    }
+  </style>
+
+  <!-- Local Vue 3 & Marked.js -->
+  <script src="/static/js/vue.global.prod.js"></script>
+  <script src="/static/js/marked.min.js"></script>
+
+  <!-- Custom External CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Toast Notification Overlay -->
+    <div class="toast-container">
+      <div v-for="t in toasts" :key="t.id" class="toast">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>{{ t.message }}</span>
+      </div>
+    </div>
+
+    <!-- Mobile Drawer Backdrop Overlay -->
+    <div v-if="isMobileSidebarOpen" class="sidebar-backdrop" @click="closeMobileSidebar"></div>
+
+    <!-- Left Vertical Sidebar -->
+    <aside class="app-sidebar" :class="{ 'mobile-open': isMobileSidebarOpen }">
+      <div class="sidebar-header" style="flex-direction: column; gap: 10px;">
+        <!-- Compact Farm Profile Switcher in Sidebar -->
+        <div class="farm-selector-wrapper" style="width: 100%; position: relative;">
+          <button class="farm-selector-btn" style="width: 100%; justify-content: space-between;" @click="toggleFarmDropdown" title="Switch Active Farm Profile">
+            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+              <span class="farm-type-badge">{{ getFarmTypeBadge(activeFarm?.farm_type) }}</span>
+              <span class="farm-name-text" style="max-width: 130px;">{{ activeFarm?.name || 'My Main Farm' }}</span>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <!-- Farm Dropdown Menu -->
+          <div v-if="showFarmDropdown" class="farm-dropdown-menu">
+            <div class="farm-dropdown-header">
+              <span>SELECT FARM</span>
+              <button class="btn-icon-sm" @click="openCreateFarmModal" title="Add New Farm">+ New</button>
+            </div>
+            <div class="farm-dropdown-list">
+              <div v-for="f in farms" :key="f.id" class="farm-dropdown-item" :class="{ active: f.id === activeFarmId }" @click="switchActiveFarm(f.id)">
+                <span class="farm-item-icon">{{ getFarmTypeBadge(f.farm_type) }}</span>
+                <div class="farm-item-details">
+                  <div class="farm-item-title">{{ f.name }}</div>
+                  <div class="farm-item-sub">{{ f.farm_type }}</div>
+                </div>
+                <span v-if="f.id === activeFarmId" class="active-check">✓</span>
+              </div>
+            </div>
+            <div class="farm-dropdown-footer">
+              <button class="btn-edit-farm" @click="openEditFarmModal">⚙ Farm Settings</button>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-green" style="width: 100%; font-size: 0.86rem;" @click="createNewThread">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New Chat</span>
+        </button>
+      </div>
+
+      <div class="sessions-list">
+        <div v-for="th in threads" :key="th.id" class="session-item" :class="{ active: th.id === activeThreadId }" @click="selectThread(th.id)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span class="session-title">{{ th.title || 'Conversation' }}</span>
+          <button class="session-del-btn" @click.stop="deleteThread(th.id)" title="Delete session">✕</button>
+        </div>
+      </div>
+
+      <div class="sidebar-footer-ram">
+        <div class="ram-status-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+          </svg>
+          <span class="ram-title">RAM Footprint</span>
+          <span class="ram-badge-live">{{ health.process_ram_mb || 0 }} MB</span>
+        </div>
+        <div class="sys-ram-sub">System: {{ health.system_ram_percent || 0 }}% used ({{ health.system_ram_used_mb || 0 }} MB)</div>
+      </div>
+    </aside>
+
+    <!-- Right Main Workspace Container -->
+    <div class="app-main">
+      
+      <!-- Top Glassmorphic Navigation Tabs Header -->
+      <header class="top-navbar">
+        <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+          <!-- Mobile Hamburger Drawer Button -->
+          <button class="icon-btn mobile-menu-btn" @click="toggleMobileSidebar" title="Open Sessions Drawer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <nav class="nav-links">
+            <div class="nav-link" :class="{ active: currentTab === 'assistant' }" @click="switchTab('assistant')" title="AI Assistant">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>AI Assistant</span>
+            </div>
+
+            <div class="nav-link" :class="{ active: currentTab === 'dashboard' }" @click="switchTab('dashboard')" title="Dashboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>Dashboard</span>
+            </div>
+
+            <div class="nav-link" :class="{ active: currentTab === 'expenditures' }" @click="switchTab('expenditures')" title="Expenditures">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              <span>Expenditures</span>
+            </div>
+
+            <div class="nav-link" :class="{ active: currentTab === 'health' }" @click="switchTab('health')" title="Health & Animals">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+              </svg>
+              <span>Health & Animals</span>
+            </div>
+
+            <div class="nav-link" :class="{ active: currentTab === 'telemetry' }" @click="switchTab('telemetry')" title="IoT Sensors">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                <line x1="12" y1="20" x2="12.01" y2="20"></line>
+              </svg>
+              <span>IoT Sensors</span>
+            </div>
+
+            <div class="nav-link" :class="{ active: currentTab === 'knowledge' }" @click="switchTab('knowledge')" title="Knowledge Base">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+              <span>Knowledge Base</span>
+            </div>
+          </nav>
+        </div>
+
+        <button class="icon-btn" @click="toggleTheme" title="Toggle Light/Dark Theme">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-if="isDarkMode">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-else>
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </header>
+
+      <!-- VIEW TAB 1: AI ASSISTANT CHAT WINDOW -->
+      <section v-if="currentTab === 'assistant'" class="chat-workspace">
+        <div class="chat-messages-area" ref="msgContainer">
+          <div class="chat-centered-container">
+
+            <div v-if="messages.length === 0" class="welcome-card">
+              <div class="welcome-logo">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                  <path d="M2 17l10 5 10-5"></path>
+                  <path d="M2 12l10 5 10-5"></path>
+                </svg>
+              </div>
+              <h3 style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); margin-top: 16px;">FarmHand AI</h3>
+              <p style="font-size: 1rem; margin: 12px auto 0; color: var(--text-muted);">Hello! How can I help with your farm today?</p>
+            </div>
+
+            <div v-for="(m, idx) in messages" :key="m.id || idx" class="msg-row" :class="m.role">
+              <div class="msg-avatar">{{ m.role === 'user' ? 'U' : 'FH' }}</div>
+              
+              <!-- VIEW MODE -->
+              <div v-if="editingMsgId !== m.id" class="msg-bubble">
+                <div class="markdown-body" v-html="renderMarkdown(m.content)"></div>
+                <button v-if="m.role === 'user' && m.id" class="msg-edit-btn" @click="startEditingMessage(m, idx)" title="Edit message & rerun">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                    <path d="m15 5 4 4"/>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- EDIT MODE CARD -->
+              <div v-else class="edit-msg-card">
+                <textarea v-model="editBuffer" class="form-control" rows="2" style="width: 100%;"></textarea>
+                <div class="edit-actions">
+                  <button class="btn-secondary-green btn-xs" @click="cancelEdit">Cancel</button>
+                  <button class="btn-green btn-xs" @click="submitEditMessage(idx)" :disabled="isSending">
+                    {{ isSending ? 'Saving...' : 'Save & Rerun' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="isSending" class="msg-row assistant">
+              <div class="msg-avatar">FH</div>
+              <div class="msg-bubble">
+                <div class="typing-dots">
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Floating Claude Input Bar -->
+        <div class="chat-centered-input-wrap">
+          <div class="chat-input-card">
+            <div class="quick-prompts-bar">
+              <button class="prompt-chip" @click="userInput = 'Record 15,000 NGN spent on goat feed'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                Expense: 15k Feed
+              </button>
+              <button class="prompt-chip" @click="userInput = 'Log vaccination treatment for animal ANM-001'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                Health: Vaccinate ANM-001
+              </button>
+              <button class="prompt-chip" @click="userInput = 'Get latest sensor readings for node_01'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path><circle cx="12" cy="12" r="2"></circle><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"></path></svg>
+                Telemetry node_01
+              </button>
+              <button class="prompt-chip" @click="userInput = 'How do I treat cassava mosaic virus?'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                Query Extension Manual
+              </button>
+            </div>
+            <div class="chat-input-inner">
+              <input type="text" class="chat-input" :placeholder="'Ask FarmHand AI about ' + (activeFarm?.name || 'your farm') + '...'" v-model="userInput" @keyup.enter="sendMessage" :disabled="isSending">
+              <button class="btn-green" style="padding: 8px 18px;" @click="sendMessage" :disabled="isSending || !userInput.trim()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NON-CHAT MAIN CONTENT VIEWS CONTAINER -->
+      <main v-else class="main-content-view">
+
+        <!-- VIEW TAB 2: DASHBOARD OVERVIEW -->
+        <section v-if="currentTab === 'dashboard'" class="view-container">
+          <h2 class="section-heading">{{ activeFarm?.name }} Dashboard Overview</h2>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="1" x2="12" y2="23"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </div>
+              <div class="metric-val">NGN {{ totalExpenditures.toLocaleString() }}</div>
+              <div class="metric-lbl">Total Farm Expenditures</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                </svg>
+              </div>
+              <div class="metric-val">{{ animals.length }}</div>
+              <div class="metric-lbl">Registered Animals</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+              </div>
+              <div class="metric-val">{{ healthLogs.length }}</div>
+              <div class="metric-lbl">Health Records</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+              </div>
+              <div class="metric-val">{{ health.vector_count }}</div>
+              <div class="metric-lbl">Knowledge Chunks</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                  <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                  <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                </svg>
+              </div>
+              <div class="metric-val">{{ health.process_ram_mb || 0 }} MB</div>
+              <div class="metric-lbl">App Process RAM (Sys: {{ health.system_ram_percent || 0 }}%)</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW TAB 3: EXPENDITURES TAB -->
+        <section v-if="currentTab === 'expenditures'" class="view-container">
+          <div class="section-header-flex">
+            <h2 class="section-heading">Financial Expenditures</h2>
+            <button class="btn-green" @click="showAddExpenditureModal = true">+ Record Expenditure</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Category</th>
+                  <th>Amount (NGN)</th>
+                  <th>Description</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="e in expenditures" :key="e.id">
+                  <td>#{{ e.id }}</td>
+                  <td><span class="badge badge-green">{{ e.category }}</span></td>
+                  <td><strong>NGN {{ (e.amount || 0).toLocaleString() }}</strong></td>
+                  <td>{{ e.description || '—' }}</td>
+                  <td>{{ e.timestamp }}</td>
+                </tr>
+                <tr v-if="expenditures.length === 0">
+                  <td colspan="5" style="text-align: center; color: var(--text-muted);">No recorded expenditures.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW TAB 4: HEALTH & ANIMALS TAB -->
+        <section v-if="currentTab === 'health'" class="view-container">
+          <div class="section-header-flex">
+            <h2 class="section-heading">Livestock & Health Records</h2>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary-green" @click="showAddAnimalModal = true">+ Register Animal</button>
+              <button class="btn-green" @click="showAddHealthLogModal = true">+ Log Health Check</button>
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 24px;">
+            <h3>Registered Animals</h3>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Tag ID</th>
+                    <th>Name</th>
+                    <th>Species</th>
+                    <th>Breed</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="a in animals" :key="a.id">
+                    <td><code>{{ a.id }}</code></td>
+                    <td><strong>{{ a.name }}</strong></td>
+                    <td>{{ a.species }}</td>
+                    <td>{{ a.breed || '—' }}</td>
+                    <td><span class="badge badge-green">{{ a.status }}</span></td>
+                  </tr>
+                  <tr v-if="animals.length === 0">
+                    <td colspan="5" style="text-align: center; color: var(--text-muted);">No animals registered.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW TAB 5: IOT SENSORS TAB -->
+        <section v-if="currentTab === 'telemetry'" class="view-container">
+          <h2 class="section-heading">IoT Sensor Telemetry</h2>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Node ID</th>
+                  <th>Sensor Type</th>
+                  <th>Reading</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in telemetry" :key="t.id">
+                  <td><code>{{ t.node_id }}</code></td>
+                  <td>{{ t.sensor_type }}</td>
+                  <td><strong>{{ t.value }} {{ t.unit }}</strong></td>
+                  <td>{{ t.timestamp }}</td>
+                </tr>
+                <tr v-if="telemetry.length === 0">
+                  <td colspan="4" style="text-align: center; color: var(--text-muted);">No telemetry sensor data available.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW TAB 6: KNOWLEDGE BASE RAG TAB -->
+        <section v-if="currentTab === 'knowledge'" class="view-container">
+          <h2 class="section-heading">Agricultural Vector Knowledge Base</h2>
+          <div class="search-box-card">
+            <input type="text" class="form-control" placeholder="Search farm manuals..." v-model="ragQuery" @keyup.enter="searchRAG">
+            <button class="btn-green" @click="searchRAG" :disabled="isSearchingRAG">Search PDF Manuals</button>
+          </div>
+
+          <div v-if="searchResults.length > 0" class="search-results-list">
+            <div v-for="(r, idx) in searchResults" :key="idx" class="search-result-card">
+              <div class="result-filename">Source: {{ r.filename }} (Score: {{ r.score?.toFixed(3) }})</div>
+              <div class="result-text">{{ r.text }}</div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+    <!-- MODAL: CREATE / EDIT FARM PROFILE -->
+    <div v-if="showFarmModal" class="modal-overlay" @click.self="showFarmModal = false">
+      <div class="modal-card">
+        <div class="modal-header-hero">
+          <div class="hero-icon-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </div>
+          <div class="hero-text-content">
+            <h3 class="hero-title">{{ isEditingFarm ? 'Edit Farm Settings' : 'Setup Your Farm Workspace' }}</h3>
+            <p class="hero-subtitle">{{ isEditingFarm ? 'Update your species scope and farm description.' : 'Configure your farm profile to get species-constrained AI intelligence and zero cross-species hallucinations.' }}</p>
+          </div>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showFarmModal = false">✕</button>
+        </div>
+
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Farm Name</label>
+            <input type="text" class="form-control" placeholder="e.g. Green Valley Poultry Pen" v-model="farmForm.name">
+          </div>
+
+          <div class="form-group">
+            <label>Target Species / Scope</label>
+            <div class="species-grid-select">
+              <!-- POULTRY / CHICKEN -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Poultry' }" @click="farmForm.farm_type = 'Poultry'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 3c.5 1 0 2 0 2s1.5-1 2 0c.5 1 0 2 0 2"></path>
+                  <path d="M13 7c1 0 3 .5 4 1.5l2-1-1 2.5c.5 1 .5 2 0 3-1 2-3 3-5 3h-2"></path>
+                  <path d="M16 11c0 1-.5 1.5-1 1.5"></path>
+                  <path d="M11 15c-3 0-6-2-7-5 1 4 3 7 7 7h3c3 0 5-2 5-5v-1"></path>
+                  <path d="M4 10c-1-2-1-4 0-6 1 2 2 4 1 6"></path>
+                  <path d="M10 17v4m0 0l-1.5 1m1.5-1l1.5 1"></path>
+                  <path d="M14 17v4m0 0l-1.5 1m1.5-1l1.5 1"></path>
+                </svg>
+                <span class="species-label">Poultry</span>
+              </div>
+
+              <!-- GOAT -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Goat' }" @click="farmForm.farm_type = 'Goat'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 7C7 4 4 4 3 6c2 1 3 3 4 5"></path>
+                  <path d="M15 7c2-3 5-3 6-1-2 1-3 3-4 5"></path>
+                  <path d="M7 11l-3 1 3 2v2l3 2h2l3-2v-2l3-2-3-1"></path>
+                  <path d="M10 18l-1 3m3-3l-1 3"></path>
+                  <circle cx="9" cy="11" r="0.75" fill="currentColor"></circle>
+                  <path d="M7 13c-2 1-3 3-3 5v3m3 0v-3m10 0v3m3 0v-3c0-2-1-4-3-5"></path>
+                  <path d="M7 15h10"></path>
+                </svg>
+                <span class="species-label">Goat</span>
+              </div>
+
+              <!-- CATTLE / COW -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Cattle' }" @click="farmForm.farm_type = 'Cattle'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4c2 0 4 2 4 5"></path>
+                  <path d="M20 4c-2 0-4 2-4 5"></path>
+                  <path d="M3 10c2 0 4 1 5 2"></path>
+                  <path d="M21 10c-2 0-4 1-5 2"></path>
+                  <path d="M8 9h8v4c0 3-2 5-4 5s-4-2-4-5V9z"></path>
+                  <path d="M7 15h10c1 0 2 1 2 2.5S18 20 17 20H7c-1 0-2-1-2-2.5S6 15 7 15z"></path>
+                  <circle cx="9.5" cy="17.5" r="0.8" fill="currentColor"></circle>
+                  <circle cx="14.5" cy="17.5" r="0.8" fill="currentColor"></circle>
+                  <circle cx="9" cy="11.5" r="0.8" fill="currentColor"></circle>
+                  <circle cx="15" cy="11.5" r="0.8" fill="currentColor"></circle>
+                </svg>
+                <span class="species-label">Cattle</span>
+              </div>
+
+              <!-- CROPS -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Crops' }" @click="farmForm.farm_type = 'Crops'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22V8"></path>
+                  <path d="M12 18c-4 0-7-2-7-6 4 0 7 2 7 6z"></path>
+                  <path d="M12 14c4 0 7-2 7-6-4 0-7 2-7 6z"></path>
+                  <path d="M12 10c-3 0-5-2-5-5 3 0 5 2 5 5z"></path>
+                  <path d="M12 8c3 0 5-2 5-5-3 0-5 2-5 5z"></path>
+                </svg>
+                <span class="species-label">Crops</span>
+              </div>
+
+              <!-- FISH -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Fish' }" @click="farmForm.farm_type = 'Fish'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 12c-4-4-10-4-14 0 4 4 10 4 14 0z"></path>
+                  <path d="M4 12L1 8v8l3-4z"></path>
+                  <path d="M13 9.5c.5 1.5 1.5 2.5 3 2.5"></path>
+                  <circle cx="15.5" cy="11" r="0.8" fill="currentColor"></circle>
+                </svg>
+                <span class="species-label">Fish</span>
+              </div>
+
+              <!-- GENERAL -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'General' }" @click="farmForm.farm_type = 'General'">
+                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 17h12v-5H9l-2-4H3v9z"></path>
+                  <path d="M14 8h5l2 4v5h-2"></path>
+                  <circle cx="7" cy="17" r="2.5"></circle>
+                  <circle cx="17" cy="17" r="3.5"></circle>
+                </svg>
+                <span class="species-label">General</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Custom Farm Details & Notes (Optional)</label>
+            <textarea class="form-control" rows="3" placeholder="e.g. 500 Isa Brown battery cage layer hens in Ibadan pen 2..." v-model="farmForm.description"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showFarmModal = false">Cancel</button>
+          <button class="btn-green" @click="submitFarmForm">{{ isEditingFarm ? 'Update Farm Settings' : 'Launch Farm Workspace →' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: RECORD EXPENDITURE -->
+    <div v-if="showAddExpenditureModal" class="modal-overlay" @click.self="showAddExpenditureModal = false">
+      <div class="modal-card">
+        <div class="modal-header-bar">
+          <h3>Record Farm Expenditure</h3>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddExpenditureModal = false">✕</button>
+        </div>
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Category</label>
+            <input type="text" class="form-control" placeholder="e.g. Feed, Fuel, Medication" v-model="newExp.category">
+          </div>
+          <div class="form-group">
+            <label>Amount (NGN)</label>
+            <input type="number" class="form-control" placeholder="e.g. 15000" v-model.number="newExp.amount">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea class="form-control" rows="3" placeholder="Details..." v-model="newExp.description"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showAddExpenditureModal = false">Cancel</button>
+          <button class="btn-green" @click="submitAddExpenditure">Save Expenditure</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: REGISTER ANIMAL -->
+    <div v-if="showAddAnimalModal" class="modal-overlay" @click.self="showAddAnimalModal = false">
+      <div class="modal-card">
+        <div class="modal-header-bar">
+          <h3>Register Farm Animal</h3>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddAnimalModal = false">✕</button>
+        </div>
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Animal Tag / ID</label>
+            <input type="text" class="form-control" placeholder="e.g. ANM-005" v-model="newAnimal.id">
+          </div>
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" class="form-control" placeholder="e.g. Sokoto Red" v-model="newAnimal.name">
+          </div>
+          <div class="form-group">
+            <label>Species</label>
+            <input type="text" class="form-control" placeholder="Goat, Cattle, Sheep..." v-model="newAnimal.species">
+          </div>
+          <div class="form-group">
+            <label>Breed</label>
+            <input type="text" class="form-control" placeholder="e.g. West African Dwarf" v-model="newAnimal.breed">
+          </div>
+        </div>
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showAddAnimalModal = false">Cancel</button>
+          <button class="btn-green" @click="submitAddAnimal">Save Animal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: LOG HEALTH EVENT -->
+    <div v-if="showAddHealthLogModal" class="modal-overlay" @click.self="showAddHealthLogModal = false">
+      <div class="modal-card">
+        <div class="modal-header-bar">
+          <h3>Log Animal Health Event</h3>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddHealthLogModal = false">✕</button>
+        </div>
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Animal ID</label>
+            <input type="text" class="form-control" placeholder="e.g. ANM-001" v-model="newHealthLog.animal_id">
+          </div>
+          <div class="form-group">
+            <label>Event Type</label>
+            <input type="text" class="form-control" placeholder="e.g. Vaccination, Deworming, Weight Check" v-model="newHealthLog.event_type">
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea class="form-control" rows="3" placeholder="Observation notes..." v-model="newHealthLog.notes"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showAddHealthLogModal = false">Cancel</button>
+          <button class="btn-green" @click="submitAddHealthLog">Save Health Log</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, computed, watch, nextTick } = Vue;
+
+    createApp({
+      setup() {
+        const currentTab = ref('assistant');
+        const isDarkMode = ref(false);
+        const isLoading = ref(true);
+        const isMobileSidebarOpen = ref(false);
+        const toasts = ref([]);
+
+        // Multi-Farm State
+        const farms = ref([]);
+        const activeFarmId = ref('default_farm');
+        const showFarmDropdown = ref(false);
+        const showFarmModal = ref(false);
+        const isEditingFarm = ref(false);
+        const farmForm = ref({ name: '', farm_type: 'General', description: '' });
+
+        // Message Editing state
+        const editingMsgId = ref(null);
+        const editBuffer = ref('');
+        const isCreatingThread = ref(false);
+
+        // Health & System state
+        const health = ref({
+          database_ready: false,
+          database_path: '',
+          vector_count: 0,
+          llm_model_ready: false,
+          process_ram_mb: 0,
+          system_ram_percent: 0,
+          system_ram_used_mb: 0,
+          system_ram_total_mb: 0,
+          total_farms: 0,
+          total_threads: 0,
+          status: '',
+          vector_store_ready: false
+        });
+
+        // Chat State
+        const threads = ref([]);
+        const activeThreadId = ref(null);
+        const messages = ref([]);
+        const userInput = ref('');
+        const isSending = ref(false);
+        const msgContainer = ref(null);
+
+        // Farm Data Records State
+        const expenditures = ref([]);
+        const healthLogs = ref([]);
+        const telemetry = ref([]);
+        const animals = ref([]);
+
+        // Modals & Form States
+        const showAddExpenditureModal = ref(false);
+        const newExp = ref({ category: '', amount: 0, description: '' });
+
+        const showAddAnimalModal = ref(false);
+        const newAnimal = ref({ id: '', name: '', species: '', breed: '', status: 'Active' });
+
+        const showAddHealthLogModal = ref(false);
+        const newHealthLog = ref({ animal_id: '', event_type: '', notes: '' });
+
+        // RAG Search State
+        const ragQuery = ref('');
+        const searchResults = ref([]);
+        const isSearchingRAG = ref(false);
+
+        // Computed
+        const activeFarm = computed(() => {
+          return farms.value.find(f => f.id === activeFarmId.value) || farms.value[0] || null;
+        });
+
+        const totalExpenditures = computed(() => {
+          return expenditures.value.reduce((sum, item) => sum + (item.amount || 0), 0);
+        });
+
+        const getFarmTypeBadge = (type) => {
+          switch((type || '').toLowerCase()) {
+            case 'poultry': return 'PLT';
+            case 'goat': return 'GOT';
+            case 'cattle': return 'CTL';
+            case 'crops': return 'CRP';
+            case 'fish': return 'FSH';
+            default: return 'GEN';
+          }
+        };
+
+        const toggleMobileSidebar = () => {
+          isMobileSidebarOpen.value = !isMobileSidebarOpen.value;
+        };
+
+        const closeMobileSidebar = () => {
+          isMobileSidebarOpen.value = false;
+        };
+
+        const toggleFarmDropdown = () => {
+          showFarmDropdown.value = !showFarmDropdown.value;
+        };
+
+        const showToast = (message) => {
+          const id = Date.now();
+          toasts.value.push({ id, message });
+          setTimeout(() => {
+            toasts.value = toasts.value.filter(t => t.id !== id);
+          }, 3200);
+        };
+
+        const fetchFarms = async () => {
+          try {
+            const res = await fetch('/farms');
+            if (res.ok) {
+              const data = await res.json();
+              farms.value = data.farms || [];
+              if (farms.value.length > 0 && (!activeFarmId.value || !farms.value.some(f => f.id === activeFarmId.value))) {
+                activeFarmId.value = farms.value[0].id;
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching farms:', e);
+          }
+        };
+
+        const switchActiveFarm = async (farmId) => {
+          activeFarmId.value = farmId;
+          showFarmDropdown.value = false;
+          showToast(`Switched to ${activeFarm.value?.name || 'Farm'}`);
+          await fetchThreads();
+        };
+
+        const openCreateFarmModal = () => {
+          isEditingFarm.value = false;
+          farmForm.value = { name: '', farm_type: 'General', description: '' };
+          showFarmDropdown.value = false;
+          showFarmModal.value = true;
+        };
+
+        const openEditFarmModal = () => {
+          isEditingFarm.value = true;
+          if (activeFarm.value) {
+            farmForm.value = {
+              name: activeFarm.value.name,
+              farm_type: activeFarm.value.farm_type,
+              description: activeFarm.value.description || ''
+            };
+          }
+          showFarmDropdown.value = false;
+          showFarmModal.value = true;
+        };
+
+        const submitFarmForm = async () => {
+          if (!farmForm.value.name.trim()) return;
+          try {
+            if (isEditingFarm.value && activeFarmId.value) {
+              const res = await fetch(`/farms/${activeFarmId.value}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(farmForm.value)
+              });
+              if (res.ok) {
+                showToast('Farm Profile Updated');
+                await fetchFarms();
+              }
+            } else {
+              const res = await fetch('/farms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(farmForm.value)
+              });
+              if (res.ok) {
+                const data = await res.json();
+                showToast('New Farm Created');
+                await fetchFarms();
+                if (data.farm && data.farm.id) {
+                  await switchActiveFarm(data.farm.id);
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error submitting farm form:', e);
+          } finally {
+            showFarmModal.value = false;
+          }
+        };
+
+        const fetchThreads = async () => {
+          try {
+            const res = await fetch(`/threads?farm_id=${activeFarmId.value}`);
+            if (res.ok) {
+              const data = await res.json();
+              threads.value = data.threads || [];
+              if (threads.value.length > 0) {
+                if (!activeThreadId.value || !threads.value.some(t => t.id === activeThreadId.value)) {
+                  selectThread(threads.value[0].id);
+                }
+              } else if (!isCreatingThread.value) {
+                await createNewThread();
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching threads:', e);
+          }
+        };
+
+        const selectThread = async (threadId) => {
+          activeThreadId.value = threadId;
+          closeMobileSidebar();
+          try {
+            const res = await fetch(`/threads/${threadId}`);
+            if (res.ok) {
+              const data = await res.json();
+              messages.value = data.messages || [];
+              scrollToBottom();
+            }
+          } catch (e) {
+            console.error('Error loading thread messages:', e);
+          }
+        };
+
+        const createNewThread = async () => {
+          if (isCreatingThread.value) return;
+          isCreatingThread.value = true;
+          closeMobileSidebar();
+          try {
+            const res = await fetch('/threads', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ farm_id: activeFarmId.value, title: 'New Chat' })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const listRes = await fetch(`/threads?farm_id=${activeFarmId.value}`);
+              if (listRes.ok) {
+                const listData = await listRes.json();
+                threads.value = listData.threads || [];
+              }
+              selectThread(data.thread_id);
+              showToast('New Chat Session Created');
+            }
+          } catch (e) {
+            console.error('Error creating new thread:', e);
+          } finally {
+            isCreatingThread.value = false;
+          }
+        };
+
+        const deleteThread = async (threadId) => {
+          try {
+            const res = await fetch(`/threads/${threadId}`, { method: 'DELETE' });
+            if (res.ok) {
+              showToast('Chat Session Deleted');
+              const wasActive = activeThreadId.value === threadId;
+              if (wasActive) {
+                activeThreadId.value = null;
+                messages.value = [];
+              }
+              
+              const listRes = await fetch(`/threads?farm_id=${activeFarmId.value}`);
+              if (listRes.ok) {
+                const listData = await listRes.json();
+                threads.value = listData.threads || [];
+                if (threads.value.length > 0) {
+                  if (wasActive || !activeThreadId.value || !threads.value.some(t => t.id === activeThreadId.value)) {
+                    selectThread(threads.value[0].id);
+                  }
+                } else {
+                  await createNewThread();
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error deleting thread:', e);
+          }
+        };
+
+        const sendMessage = async () => {
+          if (!userInput.value.trim() || isSending.value || !activeThreadId.value) return;
+
+          const userText = userInput.value.trim();
+          userInput.value = '';
+          messages.value.push({ role: 'user', content: userText });
+          scrollToBottom();
+          isSending.value = true;
+
+          try {
+            const res = await fetch('/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                thread_id: activeThreadId.value,
+                user_input: userText,
+                farm_id: activeFarmId.value
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              messages.value.push({ role: 'assistant', content: data.response });
+              scrollToBottom();
+            }
+          } catch (e) {
+            console.error('Error sending chat message:', e);
+            messages.value.push({ role: 'assistant', content: 'Network error communicating with FarmHand Edge system.' });
+          } finally {
+            isSending.value = false;
+          }
+        };
+
+        const startEditingMessage = (m, idx) => {
+          editingMsgId.value = m.id;
+          editBuffer.value = m.content;
+        };
+
+        const cancelEdit = () => {
+          editingMsgId.value = null;
+          editBuffer.value = '';
+        };
+
+        const submitEditMessage = async (msgIndex) => {
+          if (!editBuffer.value.trim() || isSending.value) return;
+          isSending.value = true;
+          try {
+            messages.value = messages.value.slice(0, msgIndex);
+            const userText = editBuffer.value.trim();
+            editingMsgId.value = null;
+            editBuffer.value = '';
+
+            messages.value.push({ role: 'user', content: userText });
+            scrollToBottom();
+
+            const res = await fetch('/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                thread_id: activeThreadId.value,
+                user_input: userText,
+                farm_id: activeFarmId.value
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              messages.value.push({ role: 'assistant', content: data.response });
+              scrollToBottom();
+            }
+          } catch (e) {
+            console.error('Error submitting edited message:', e);
+          } finally {
+            isSending.value = false;
+          }
+        };
+
+        const renderMarkdown = (text) => {
+          if (!text) return '';
+          try {
+            return marked.parse(text);
+          } catch (e) {
+            return text;
+          }
+        };
+
+        const scrollToBottom = () => {
+          nextTick(() => {
+            if (msgContainer.value) {
+              msgContainer.value.scrollTop = msgContainer.value.scrollHeight;
+            }
+          });
+        };
+
+        const switchTab = (tabName) => {
+          if (currentTab.value === tabName && !isLoading.value) return;
+          isLoading.value = true;
+          currentTab.value = tabName;
+          closeMobileSidebar();
+          setTimeout(() => {
+            isLoading.value = false;
+          }, 400);
+        };
+
+        const toggleTheme = () => {
+          isDarkMode.value = !isDarkMode.value;
+          document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light');
+        };
+
+        const fetchHealth = async () => {
+          try {
+            const res = await fetch('/health');
+            if (res.ok) {
+              const data = await res.json();
+              health.value = data;
+            }
+          } catch (e) {
+            console.error('Error fetching health metrics:', e);
+          }
+        };
+
+        onMounted(async () => {
+          await fetchFarms();
+          if (farms.value.length === 0 || (farms.value.length === 1 && farms.value[0].id === 'default_farm' && farms.value[0].name === 'My Main Farm')) {
+            openCreateFarmModal();
+          }
+          await fetchThreads();
+          await fetchHealth();
+          setInterval(fetchHealth, 5000);
+          isLoading.value = false;
+        });
+
+        return {
+          currentTab,
+          isDarkMode,
+          isLoading,
+          isMobileSidebarOpen,
+          toasts,
+          health,
+          farms,
+          activeFarmId,
+          activeFarm,
+          showFarmDropdown,
+          showFarmModal,
+          isEditingFarm,
+          farmForm,
+          getFarmTypeBadge,
+          toggleFarmDropdown,
+          switchActiveFarm,
+          openCreateFarmModal,
+          openEditFarmModal,
+          submitFarmForm,
+          threads,
+          activeThreadId,
+          messages,
+          userInput,
+          isSending,
+          msgContainer,
+          expenditures,
+          healthLogs,
+          telemetry,
+          animals,
+          editingMsgId,
+          editBuffer,
+          showAddExpenditureModal,
+          newExp,
+          showAddAnimalModal,
+          newAnimal,
+          showAddHealthLogModal,
+          newHealthLog,
+          ragQuery,
+          searchResults,
+          isSearchingRAG,
+          totalExpenditures,
+          toggleMobileSidebar,
+          closeMobileSidebar,
+          switchTab,
+          toggleTheme,
+          selectThread,
+          createNewThread,
+          deleteThread,
+          sendMessage,
+          startEditingMessage,
+          cancelEdit,
+          submitEditMessage,
+          renderMarkdown
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
