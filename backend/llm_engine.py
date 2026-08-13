@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
 
-N_CTX = 2048
+N_CTX = 4096
 N_THREADS = 4
 
 _llm_instance: Optional[Llama] = None
@@ -101,34 +101,13 @@ def mock_router(messages: List[Dict[str, str]]) -> str:
 
 
 def sanitize_response(text: str) -> str:
-    """Ensure raw JSON strings or function call arrays are NEVER returned to the UI."""
     clean_text = text.strip()
     if clean_text.startswith("[") or clean_text.startswith("{"):
-        try:
-            data = json.loads(clean_text)
-            first_item = None
-            if isinstance(data, list) and len(data) > 0:
-                first_item = data[0]
-            elif isinstance(data, dict) and "function_name" in data:
-                first_item = data
-
-            if first_item and isinstance(first_item, dict) and "function_name" in first_item:
-                fn_name = first_item["function_name"]
-                if fn_name == "query_knowledge_base":
-                    return "I searched the extension manuals regarding your query. Feather loss in poultry can be caused by seasonal molting, protein deficiency, lice/mite infestations, or pecking order stress. Ensure adequate feed protein (16-18%) and inspect birds for external parasites."
-                elif fn_name == "write_expenditure":
-                    return "Recorded expenditure entry into your farm financial database."
-                elif fn_name == "write_health_log":
-                    return "Logged livestock health event into your farm health database."
-                else:
-                    return "Processed your request. Let me know if you need more specific information."
-        except Exception:
-            pass
+        return "I processed your request, but encountered an error formatting the final output."
     return clean_text
 
 
 def is_simple_greeting(messages: List[Dict[str, str]]) -> bool:
-    """Check if the user's latest prompt is a simple greeting."""
     if not messages:
         return False
     user_msgs = [m for m in messages if m.get("role") == "user"]
@@ -143,16 +122,41 @@ def is_simple_greeting(messages: List[Dict[str, str]]) -> bool:
 
 
 def detect_language_instruction(user_text: str) -> str:
-    """Detect language and return formatting directive for standard English, Pidgin, or Hausa."""
     t = user_text.lower()
     pidgin_kw = ["how far", "wetin", " dey ", "make you", "abeg", "well-well", "no dey", "na so", "na if", "fit help", "pikin"]
     hausa_kw = ["sannu", "ina kwana", "yaya aiki", "barka", "nagode", "ina gajiya", "shinkafa", "kaza"]
 
     if any(k in t for k in pidgin_kw):
-        return "LANGUAGE INSTRUCTION: The user is speaking Nigerian Pidgin. Respond in natural, warm Nigerian Pidgin English."
+        return "The user is speaking Nigerian Pidgin. Respond in natural, warm Nigerian Pidgin English."
     elif any(k in t for k in hausa_kw):
-        return "LANGUAGE INSTRUCTION: The user is speaking Hausa. Respond in clear, natural Hausa language."
-    return "LANGUAGE INSTRUCTION: The user is speaking standard English. Respond ONLY in standard professional English."
+        return "The user is speaking Hausa. Respond in clear, natural Hausa language."
+    return "The user is speaking standard English. Respond ONLY in standard professional English."
+
+
+def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
+    """Pass 3: Pure data extraction. No schemas, no history, no JSON instructions."""
+    system_prompt = {
+        "role": "system",
+        "content": (
+            "You are an expert agricultural AI assistant.\n"
+            f"{lang_directive}\n"
+            "Your task is to answer the user's question using ONLY the provided reference material.\n"
+            "Provide a direct, natural response. Do not echo or repeat the reference material verbatim. Do not output JSON."
+        )
+    }
+
+    user_prompt = {
+        "role": "user",
+        "content": f"Reference Material:\n{context_data}\n\nQuestion: {user_question}"
+    }
+
+    response = llm.create_chat_completion(
+        messages=[system_prompt, user_prompt],
+        max_tokens=512,
+        temperature=0.1,
+        stop=["<|im_end|>", "<|im_start|>"]
+    )
+    return response["choices"][0]["message"]["content"].strip()
 
 
 def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm") -> str:
@@ -160,7 +164,6 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
     if llm is None:
         return mock_router(messages)
 
-    # 1. Instant Greeting Handler
     if is_simple_greeting(messages):
         return "Hello! How can I assist you today?"
 
@@ -172,12 +175,9 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         "role": "system",
         "content": (
             "You are FarmHand AI, a strict backend routing agent.\n"
-            f"{lang_directive}\n\n"
-            f"{db_summary}\n\n"
             "RULES:\n"
-            "1. If the user greets you, output exactly: 'Hello! How can I assist you today?'\n"
-            "2. For query_knowledge_base, extract the core keywords and entities directly from the user prompt without altering species, crop, or subject.\n"
-            "3. For ALL operational inputs, output ONLY a JSON array matching available tools.\n\n"
+            "1. Output ONLY a JSON array matching available tools to route the user's request.\n"
+            "2. For query_knowledge_base, extract core keywords.\n\n"
             "TOOLS:\n"
             "- list_animals()\n"
             "- get_animal_record(id: str)\n"
@@ -186,18 +186,8 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
             "- write_health_log(animal_id: str, event_type: str, notes: str)\n"
             "- query_knowledge_base(search_query: str)\n\n"
             "EXAMPLES:\n"
-            "<example>\n"
             "Input: Why are my chickens losing their feathers rapidly?\n"
             'Output: [{"function_name": "query_knowledge_base", "arguments": {"search_query": "rapid feather loss in chickens causes treatment"}}]\n'
-            "</example>\n"
-            "<example>\n"
-            "Input: How do I treat mastitis in dairy cows?\n"
-            'Output: [{"function_name": "query_knowledge_base", "arguments": {"search_query": "mastitis treatment in dairy cows"}}]\n'
-            "</example>\n"
-            "<example>\n"
-            "Input: Show me all animals.\n"
-            'Output: [{"function_name": "list_animals", "arguments": {}}]\n'
-            "</example>"
         )
     }
 
@@ -250,86 +240,21 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
                 rag_context_prompt = res["context_prompt"]
                 retrieved_chunks = res.get("retrieved_chunks", [])
 
-        # Extract the actual last user message to append context to
-        last_user_msg = messages[-1]["content"] if messages else ""
-
-        # PASS 3: RAG Knowledge Base Synthesis
+        # PASS 3: Totally Stateless Extraction
         if rag_context_prompt:
-            print(f"[llm_engine] RAG context prompt: {rag_context_prompt[:200]}...")
             if not retrieved_chunks:
                 return "I couldn't find any relevant information in the knowledge base to answer your question."
-
-            rag_system = {
-                "role": "system",
-                "content": (
-                    "You are FarmHand AI, an expert agricultural and veterinary assistant.\n"
-                    f"{lang_directive}\n"
-                    "Maintain strict biological accuracy. Answer the user in clear, conversational language using ONLY the provided context blocks."
-                )
-            }
             
-            # Splice context into the final user message. No trailing system tags.
-            rag_messages = [rag_system] + messages[:-1]
-            rag_messages.append({
-                "role": "user",
-                "content": f"{last_user_msg}\n\n[SYSTEM INJECTION - Answer the above question using this context:\n{rag_context_prompt}]"
-            })
-            
-            rag_response = llm.create_chat_completion(
-                messages=rag_messages,
-                max_tokens=512,
-                temperature=0.1,
-                stop=["<|im_end|>", "<|im_start|>"]
-            )
-            rag_text = rag_response["choices"][0]["message"]["content"].strip()
-            print(f"[llm_engine] RAG raw output: {rag_text}")
-            
-            if rag_text.startswith("[") or rag_text.startswith("{"):
-                return "I found relevant information but had trouble formatting the response. Please try again."
+            rag_text = generate_stateless_answer(llm, rag_context_prompt, last_user_prompt, lang_directive)
+            print(f"[llm_engine] RAG stateless output: {rag_text}")
             return sanitize_response(rag_text)
 
-        # PASS 3: Standard Database Synthesis
+        # PASS 3: Database Stateless Extraction
         tool_feedback_str = "\n".join([f"- {tr['tool']}: {json.dumps(tr['result'])}" for tr in tool_results])
+        synth_text = generate_stateless_answer(llm, tool_feedback_str, last_user_prompt, lang_directive)
         
-        synthesis_system = {
-            "role": "system",
-            "content": (
-                "You are FarmHand AI, a helpful agricultural assistant.\n"
-                f"{lang_directive}\n"
-                "Read the database execution results and write a clear, conversational reply explaining the outcome."
-            )
-        }
-        
-        # Splice database results into the final user message.
-        synthesis_messages = [synthesis_system] + messages[:-1]
-        synthesis_messages.append({
-            "role": "user",
-            "content": f"{last_user_msg}\n\n[SYSTEM INJECTION - Summarize the following database results in conversational text:\n{tool_feedback_str}]"
-        })
-        
-        synthesis_response = llm.create_chat_completion(
-            messages=synthesis_messages,
-            max_tokens=512,
-            temperature=0.1,
-            stop=["<|im_end|>", "<|im_start|>"]
-        )
-        synth_text = synthesis_response["choices"][0]["message"]["content"].strip()
-
-        if synth_text.startswith("[") or synth_text.startswith("{"):
-            action_summaries = []
-            for tr in tool_results:
-                r_data = tr.get("result", {})
-                cnt = r_data.get("count", 0)
-                items = r_data.get("data", [])
-                if cnt == 0 or not items:
-                    action_summaries.append(f"No records currently exist for {tr['tool']} in the database.")
-                else:
-                    action_summaries.append(f"Retrieved {cnt} record(s): {items}")
-            return sanitize_response(" ".join(action_summaries))
-
         return sanitize_response(synth_text)
 
-    # SAFETY CATCH
     if not is_tool_call and not is_greeting:
         return "I encountered an error mapping that request. Could you rephrase it?"
 
