@@ -229,31 +229,46 @@ def get_text_only_grammar() -> LlamaGrammar:
 
 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Pass 3: Pure data extraction. Post-process to strip any JSON."""
+    """Pass 3: Pure data extraction."""
     system_prompt = {
         "role": "system",
         "content": (
-            "You are FarmHand AI. Answer the farmer's question in plain English.\n"
+            "You are FarmHand AI, a helpful farming assistant.\n"
             f"{lang_directive}\n\n"
-            "Write 1-3 clear sentences answering the question. Do not output JSON."
+            "IMPORTANT: Answer the farmer's question in plain English sentences only. "
+            "Never output JSON, never output function calls. Just give a helpful answer."
         )
     }
 
     user_prompt = {
         "role": "user",
-        "content": f"Reference material:\n{context_data}\n\nQuestion: {user_question}"
+        "content": f"Reference material:\n{context_data}\n\nFarmer's question: {user_question}\n\nYour helpful answer:"
     }
 
     response = llm.create_chat_completion(
         messages=[system_prompt, user_prompt],
         max_tokens=512,
-        temperature=0.3,
+        temperature=0.2,
         stop=["<|im_end|>", "<|im_start|>"]
     )
     raw_output = response["choices"][0]["message"]["content"].strip()
 
     if raw_output.startswith("[") or raw_output.startswith("{"):
-        return "Error: Failed to process knowledge base response. Please rephrase your question."
+        # Retry with more explicit instruction
+        retry_prompt = {
+            "role": "user",
+            "content": f"The previous answer was in JSON format. Please rewrite it as plain English sentences only.\n\nOriginal: {raw_output}\n\nPlain English:"
+        }
+        response2 = llm.create_chat_completion(
+            messages=[system_prompt, user_prompt, retry_prompt],
+            max_tokens=512,
+            temperature=0.1,
+            stop=["<|im_end|>", "<|im_start|>"]
+        )
+        raw_output = response2["choices"][0]["message"]["content"].strip()
+
+        if raw_output.startswith("[") or raw_output.startswith("{"):
+            return "Error: Failed to process knowledge base response. Please rephrase your question."
 
     return raw_output
 
