@@ -252,6 +252,7 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
         stop=["<|im_end|>", "<|im_start|>"]
     )
     raw_output = response["choices"][0]["message"]["content"].strip()
+    print(f"[llm_engine] Pass 3 raw: {repr(raw_output[:200])}")
 
     if raw_output.startswith("[") or raw_output.startswith("{"):
         # Retry with more explicit instruction
@@ -260,12 +261,13 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
             "content": f"The previous answer was in JSON format. Please rewrite it as plain English sentences only.\n\nOriginal: {raw_output}\n\nPlain English:"
         }
         response2 = llm.create_chat_completion(
-            messages=[system_prompt, user_prompt, retry_prompt],
+            messages=[system_prompt, user_prompt, {"role": "assistant", "content": raw_output}, retry_prompt],
             max_tokens=512,
             temperature=0.1,
             stop=["<|im_end|>", "<|im_start|>"]
         )
         raw_output = response2["choices"][0]["message"]["content"].strip()
+        print(f"[llm_engine] Pass 3 retry: {repr(raw_output[:200])}")
 
         if raw_output.startswith("[") or raw_output.startswith("{"):
             return "Error: Failed to process knowledge base response. Please rephrase your question."
