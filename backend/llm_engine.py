@@ -271,7 +271,7 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
     return raw_output
 
 
-def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm") -> str:
+def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: str = None) -> str:
     llm = get_llm()
     if llm is None:
         return mock_router(messages)
