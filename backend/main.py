@@ -128,6 +128,7 @@ class ChatRequest(BaseModel):
     thread_id: str = Field(..., description="UUID of active chat thread")
     user_input: str = Field(..., description="User text prompt")
     farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
+    language: Optional[str] = Field("auto", description="Language: auto, english, hausa, pidgin")
 
 
 class EditMessageRequest(BaseModel):
@@ -297,6 +298,7 @@ def chat_endpoint(payload: ChatRequest):
     thread_id = payload.thread_id
     user_input = payload.user_input.strip()
     farm_id = payload.farm_id or "default_farm"
+    language = payload.language or "auto"
 
     if not user_input:
         raise HTTPException(status_code=400, detail="user_input cannot be empty.")
@@ -311,7 +313,7 @@ def chat_endpoint(payload: ChatRequest):
 
     # 3. Process LLM completion with farm_id context
     try:
-        assistant_response = chat_completion(messages, farm_id=farm_id, thread_id=thread_id)
+        assistant_response = chat_completion(messages, farm_id=farm_id, thread_id=thread_id, language=language)
     except Exception as e:
         logger.error(f"Error in chat_completion: {e}")
         assistant_response = f"Internal system error: {str(e)}"

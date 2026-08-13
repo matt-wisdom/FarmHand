@@ -75,6 +75,55 @@
           </div>
         </div>
 
+        <!-- Language Selector -->
+        <div class="farm-selector-wrapper" style="width: 100%; position: relative;">
+          <button class="farm-selector-btn" style="width: 100%; justify-content: space-between;" @click="showLangDropdown = !showLangDropdown" title="Language">
+            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+              <span class="farm-type-badge" style="background: var(--accent-gold); color: #000;">{{ selectedLanguage === 'auto' ? '🌐 Auto' : (selectedLanguage === 'english' ? 'EN' : (selectedLanguage === 'hausa' ? 'HA' : 'PG')) }}</span>
+              <span class="farm-name-text" style="max-width: 130px;">{{ selectedLanguage === 'auto' ? 'Auto-detect' : (selectedLanguage === 'english' ? 'English' : (selectedLanguage === 'hausa' ? 'Hausa' : 'Pidgin')) }}</span>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <div v-if="showLangDropdown" class="farm-dropdown-menu" style="min-width: 160px;">
+            <div class="farm-dropdown-header">
+              <span>LANGUAGE</span>
+            </div>
+            <div class="farm-dropdown-list">
+              <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'auto' }" @click="selectedLanguage = 'auto'; showLangDropdown = false">
+                <span class="farm-item-icon">🌐</span>
+                <div class="farm-item-details">
+                  <div class="farm-item-title">Auto-detect</div>
+                </div>
+                <span v-if="selectedLanguage === 'auto'" class="active-check">✓</span>
+              </div>
+              <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'english' }" @click="selectedLanguage = 'english'; showLangDropdown = false">
+                <span class="farm-item-icon">EN</span>
+                <div class="farm-item-details">
+                  <div class="farm-item-title">English</div>
+                </div>
+                <span v-if="selectedLanguage === 'english'" class="active-check">✓</span>
+              </div>
+              <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'hausa' }" @click="selectedLanguage = 'hausa'; showLangDropdown = false">
+                <span class="farm-item-icon">HA</span>
+                <div class="farm-item-details">
+                  <div class="farm-item-title">Hausa</div>
+                </div>
+                <span v-if="selectedLanguage === 'hausa'" class="active-check">✓</span>
+              </div>
+              <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'pidgin' }" @click="selectedLanguage = 'pidgin'; showLangDropdown = false">
+                <span class="farm-item-icon">PG</span>
+                <div class="farm-item-details">
+                  <div class="farm-item-title">Pidgin</div>
+                </div>
+                <span v-if="selectedLanguage === 'pidgin'" class="active-check">✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button class="btn-green" style="width: 100%; font-size: 0.86rem;" @click="createNewThread">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -697,6 +746,10 @@
         const isEditingFarm = ref(false);
         const farmForm = ref({ name: '', farm_type: 'General', description: '' });
 
+        // Language selector state
+        const selectedLanguage = ref('auto'); // auto, english, hausa, pidgin
+        const showLangDropdown = ref(false);
+
         // Message Editing state
         const editingMsgId = ref(null);
         const editBuffer = ref('');
@@ -970,7 +1023,8 @@
               body: JSON.stringify({
                 thread_id: activeThreadId.value,
                 user_input: userText,
-                farm_id: activeFarmId.value
+                farm_id: activeFarmId.value,
+                language: selectedLanguage.value
               })
             });
 
@@ -1100,6 +1154,8 @@
           showFarmModal,
           isEditingFarm,
           farmForm,
+          selectedLanguage,
+          showLangDropdown,
           getFarmTypeBadge,
           toggleFarmDropdown,
           switchActiveFarm,

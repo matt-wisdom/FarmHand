@@ -24,10 +24,11 @@
   --accent-green-bright: #10B981;
   --accent-green-dark: #047857;
   --accent-green-light: rgba(5, 150, 105, 0.08);
-  
+
   --accent-blue: #2563EB;
   --accent-rose: #E11D48;
   --accent-amber: #D97706;
+  --accent-gold: #F59E0B;
   
   --border-green: rgba(5, 150, 105, 0.25);
   --border-subtle: rgba(17, 24, 39, 0.08);
