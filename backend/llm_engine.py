@@ -229,50 +229,61 @@ def get_text_only_grammar() -> LlamaGrammar:
 
 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Pass 3: Pure data extraction."""
-    system_prompt = {
+    """Two-pass: Extract facts first, then format into answer."""
+
+    # Pass 3a: Extract key facts
+    extract_prompt = {
+        "role": "system",
+        "content": (
+            "You are a factual extractor. Read the reference material and extract 2-3 key facts relevant to the question.\n"
+            f"{lang_directive}\n"
+            "Output only simple facts as bullet points. No JSON. No tool calls."
+        )
+    }
+
+    extract_user = {
+        "role": "user",
+        "content": f"Reference:\n{context_data}\n\nQuestion: {user_question}\n\nKey facts:"
+    }
+
+    response1 = llm.create_chat_completion(
+        messages=[extract_prompt, extract_user],
+        max_tokens=256,
+        temperature=0.1,
+        stop=["<|im_end|>", "<|im_start|>", "[", "{"]
+    )
+    facts = response1["choices"][0]["message"]["content"].strip()
+    print(f"[llm_engine] Pass 3a facts: {facts[:100]}")
+
+    # If extraction returned JSON, use raw context
+    if facts.startswith("[") or facts.startswith("{") or not facts:
+        facts = context_data[:500]
+
+    # Pass 3b: Format into final answer
+    format_prompt = {
         "role": "system",
         "content": (
             "You are FarmHand AI, a helpful farming assistant.\n"
-            f"{lang_directive}\n\n"
-            "IMPORTANT: Answer the farmer's question in plain English sentences only. "
-            "Never output JSON, never output function calls. Just give a helpful answer."
+            f"{lang_directive}\n"
+            "Give a direct, friendly answer in 1-3 sentences. If you don't know, say so."
         )
     }
 
-    user_prompt = {
+    format_user = {
         "role": "user",
-        "content": f"Reference material:\n{context_data}\n\nFarmer's question: {user_question}\n\nYour helpful answer:"
+        "content": f"Facts: {facts}\n\nQuestion: {user_question}\n\nAnswer:"
     }
 
-    response = llm.create_chat_completion(
-        messages=[system_prompt, user_prompt],
-        max_tokens=512,
+    response2 = llm.create_chat_completion(
+        messages=[format_prompt, format_user],
+        max_tokens=256,
         temperature=0.2,
-        stop=["<|im_end|>", "<|im_start|>"]
+        stop=["<|im_end|>", "<|im_start|>", "[", "{"]
     )
-    raw_output = response["choices"][0]["message"]["content"].strip()
-    print(f"[llm_engine] Pass 3 raw: {repr(raw_output[:200])}")
+    answer = response2["choices"][0]["message"]["content"].strip()
+    print(f"[llm_engine] Pass 3b answer: {answer[:100]}")
 
-    if raw_output.startswith("[") or raw_output.startswith("{"):
-        # Retry with more explicit instruction
-        retry_prompt = {
-            "role": "user",
-            "content": f"The previous answer was in JSON format. Please rewrite it as plain English sentences only.\n\nOriginal: {raw_output}\n\nPlain English:"
-        }
-        response2 = llm.create_chat_completion(
-            messages=[system_prompt, user_prompt, {"role": "assistant", "content": raw_output}, retry_prompt],
-            max_tokens=512,
-            temperature=0.1,
-            stop=["<|im_end|>", "<|im_start|>"]
-        )
-        raw_output = response2["choices"][0]["message"]["content"].strip()
-        print(f"[llm_engine] Pass 3 retry: {repr(raw_output[:200])}")
-
-        if raw_output.startswith("[") or raw_output.startswith("{"):
-            return "Error: Failed to process knowledge base response. Please rephrase your question."
-
-    return raw_output
+    return answer if answer else "I found relevant information but couldn't format the response."
 
 
 def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: str = None) -> str:
@@ -368,24 +379,20 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
                 rag_context_prompt = res["context_prompt"]
                 retrieved_chunks = res.get("retrieved_chunks", [])
 
-# PASS 3: Extract answer directly from chunks (bypass LLM synthesis which loops)
+# PASS 3: RAG Answer Generation (two-pass: extract facts, then format)
         if rag_context_prompt:
             if not retrieved_chunks:
                 return "I couldn't find any relevant information in the knowledge base to answer your question."
 
-            # Get raw chunks from query_knowledge_base result
-            query_result = None
-            for tr in tool_results:
-                if tr.get("tool") == "query_knowledge_base":
-                    query_result = tr.get("result", {})
-                    break
+            # Clean context to reduce confusion
+            clean_context = rag_context_prompt.replace("[{", "START ").replace("}]", " END")
 
-            raw_chunks = query_result.get("raw_chunks", []) if query_result else []
-            if raw_chunks:
-                primary = raw_chunks[0][:600]
-                return f"Based on the knowledge base: {primary}"
+            rag_text = generate_stateless_answer(llm, clean_context, last_user_prompt, lang_directive)
 
-            return "I found relevant information but couldn't format the response. Please try asking differently."
+            if not rag_text or len(rag_text.strip()) < 5:
+                return "Error processing knowledge base response. Please rephrase your question."
+
+            return sanitize_response(rag_text)
 
         # PASS 3: Database Stateless Extraction
         tool_feedback_str = "\n".join([f"- {tr['tool']}: {json.dumps(tr['result'])}" for tr in tool_results])

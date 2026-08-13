@@ -18,9 +18,9 @@ FASTEMBED_CACHE_DIR = MODELS_DIR / "fastembed_cache"
 
 # Embedding Model Configuration
 MODEL_NAME = os.getenv("FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5")
-CHUNK_SIZE_CHARS = 1800  # ~450-500 tokens
-CHUNK_OVERLAP_CHARS = 200  # ~50 tokens
-BATCH_SIZE = 128  # Memory-efficient batch size (~50MB RAM footprint)
+CHUNK_SIZE_CHARS = 512  # Smaller chunks for 3B model
+CHUNK_OVERLAP_CHARS = 100  # ~25 tokens overlap
+BATCH_SIZE = 64  # Smaller batch for memory efficiency
 
 
 def extract_text_from_pdf(pdf_path: Path) -> str:
