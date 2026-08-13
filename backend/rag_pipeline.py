@@ -174,6 +174,7 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
         "status": "success",
         "search_query": search_query,
         "context_prompt": strict_prompt,
+        "raw_chunks": [c["text"] for c in chunks],
         "retrieved_chunks": [
             {"filename": c["filename"], "chunk_id": c["chunk_id"], "score": c["score"]}
             for c in chunks

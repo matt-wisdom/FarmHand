@@ -368,18 +368,24 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
                 rag_context_prompt = res["context_prompt"]
                 retrieved_chunks = res.get("retrieved_chunks", [])
 
-        # PASS 3: Totally Stateless Extraction
+# PASS 3: Extract answer directly from chunks (bypass LLM synthesis which loops)
         if rag_context_prompt:
             if not retrieved_chunks:
                 return "I couldn't find any relevant information in the knowledge base to answer your question."
 
-            rag_text = generate_stateless_answer(llm, rag_context_prompt, last_user_prompt, lang_directive)
-            print(f"[llm_engine] RAG stateless output: {rag_text[:100] if rag_text else '(empty)'}...")
+            # Get raw chunks from query_knowledge_base result
+            query_result = None
+            for tr in tool_results:
+                if tr.get("tool") == "query_knowledge_base":
+                    query_result = tr.get("result", {})
+                    break
 
-            if not rag_text or len(rag_text.strip()) < 10:
-                return "Error processing knowledge base response. Please rephrase your question."
+            raw_chunks = query_result.get("raw_chunks", []) if query_result else []
+            if raw_chunks:
+                primary = raw_chunks[0][:600]
+                return f"Based on the knowledge base: {primary}"
 
-            return sanitize_response(rag_text)
+            return "I found relevant information but couldn't format the response. Please try asking differently."
 
         # PASS 3: Database Stateless Extraction
         tool_feedback_str = "\n".join([f"- {tr['tool']}: {json.dumps(tr['result'])}" for tr in tool_results])
