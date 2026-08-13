@@ -170,9 +170,6 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
         f"User Question: {search_query}"
     )
 
-    if len(strict_prompt) > 5000:
-        strict_prompt = strict_prompt[:5000] + "\n...[Context truncated for token limits]"
-
     return {
         "status": "success",
         "search_query": search_query,
