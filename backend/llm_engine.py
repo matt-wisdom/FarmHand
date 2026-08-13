@@ -125,12 +125,55 @@ def build_tools_json_schema() -> Dict[str, Any]:
     }
 
 
+def build_response_json_schema() -> Dict[str, Any]:
+    """Schema for constrained JSON responses from Pass 1."""
+    tool_names = list(TOOL_MAP.keys())
+    return {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["tool_call", "respond", "error"]
+            },
+            "data": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "function_name": {"type": "string", "enum": tool_names},
+                        "arguments": {"type": "object"}
+                    },
+                    "required": ["function_name", "arguments"],
+                    "additionalProperties": False
+                }
+            },
+            "text": {"type": "string"},
+            "message": {"type": "string"},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "required": ["action"],
+        "additionalProperties": False
+    }
+
+
 def get_llama_grammar() -> LlamaGrammar:
     global _llama_grammar_instance
     if _llama_grammar_instance is None:
         schema_str = json.dumps(build_tools_json_schema())
         _llama_grammar_instance = LlamaGrammar.from_json_schema(schema_str)
     return _llama_grammar_instance
+
+
+_response_grammar_instance = None
+
+
+def get_response_grammar() -> LlamaGrammar:
+    """Grammar for constrained JSON responses (action/data/text format)."""
+    global _response_grammar_instance
+    if _response_grammar_instance is None:
+        schema_str = json.dumps(build_response_json_schema())
+        _response_grammar_instance = LlamaGrammar.from_json_schema(schema_str)
+    return _response_grammar_instance
 
 
 def get_llm() -> Optional[Llama]:
@@ -151,25 +194,51 @@ def get_llm() -> Optional[Llama]:
 
 
 def parse_tool_calls(output_text: str) -> Tuple[bool, List[Dict[str, Any]]]:
+    """Parse both legacy and new JSON response formats."""
     clean_text = output_text.strip()
-    if not (clean_text.startswith("[") and "function_name" in clean_text):
-        return False, []
 
-    try:
-        data = json.loads(clean_text)
-        if isinstance(data, list) and len(data) > 0:
-            valid_calls = []
-            for item in data:
-                if isinstance(item, dict) and "function_name" in item and item["function_name"] in TOOL_MAP:
-                    args = item.get("arguments", {})
-                    if not args:
-                        args = {k: v for k, v in item.items() if k != "function_name"}
-                    valid_calls.append({"function_name": item["function_name"], "arguments": args})
+    # Try new format: {"action": "tool_call", "data": [...]}
+    if clean_text.startswith("{"):
+        try:
+            data = json.loads(clean_text)
+            if isinstance(data, dict):
+                action = data.get("action")
+                if action == "tool_call" and "data" in data:
+                    tool_calls = []
+                    for item in data.get("data", []):
+                        if isinstance(item, dict) and "function_name" in item:
+                            fn_name = item["function_name"]
+                            if fn_name in TOOL_MAP:
+                                args = item.get("arguments", {})
+                                tool_calls.append({"function_name": fn_name, "arguments": args})
+                    if tool_calls:
+                        return True, tool_calls
+                elif action == "respond":
+                    # Direct response - return special marker
+                    return False, [{"_direct_response": data.get("text", ""), "_confidence": data.get("confidence", 0.9)}]
+                elif action == "error":
+                    return False, [{"_error": data.get("message", "Unknown error")}]
+        except Exception:
+            pass
 
-            if valid_calls:
-                return True, valid_calls
-    except Exception:
-        pass
+    # Try legacy format: [{"function_name": ...}]
+    if clean_text.startswith("[") and "function_name" in clean_text:
+        try:
+            data = json.loads(clean_text)
+            if isinstance(data, list) and len(data) > 0:
+                valid_calls = []
+                for item in data:
+                    if isinstance(item, dict) and "function_name" in item and item["function_name"] in TOOL_MAP:
+                        args = item.get("arguments", {})
+                        if not args:
+                            args = {k: v for k, v in item.items() if k != "function_name"}
+                        valid_calls.append({"function_name": item["function_name"], "arguments": args})
+
+                if valid_calls:
+                    return True, valid_calls
+        except Exception:
+            pass
+
     return False, []
 
 
@@ -314,9 +383,15 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         "role": "system",
         "content": (
             "You are FarmHand AI, a strict backend routing agent.\n"
+            "OUTPUT FORMAT: You MUST output valid JSON in one of these formats:\n\n"
+            '1. Tool Call: {"action": "tool_call", "data": [{"function_name": "tool_name", "arguments": {...}}], "confidence": 0.95}\n'
+            '2. Direct Response: {"action": "respond", "text": "Your answer here", "confidence": 0.9}\n'
+            '3. Error: {"action": "error", "message": "Error message", "confidence": 1.0}\n\n'
             "RULES:\n"
-            "1. Output ONLY a JSON array matching available tools to route the user's request.\n"
-            "2. For query_knowledge_base, extract core keywords.\n\n"
+            "- Always output valid JSON, never plain text\n"
+            "- For knowledge queries, use query_knowledge_base tool\n"
+            "- For greetings, use action: respond with text: greeting\n"
+            "- Include confidence score (0-1)\n\n"
             "TOOLS:\n"
             "- list_animals()\n"
             "- get_animal_record(id: str)\n"
@@ -325,8 +400,12 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
             "- write_health_log(animal_id: str, event_type: str, notes: str)\n"
             "- query_knowledge_base(search_query: str)\n\n"
             "EXAMPLES:\n"
-            "Input: Why are my chickens losing their feathers rapidly?\n"
-            'Output: [{"function_name": "query_knowledge_base", "arguments": {"search_query": "rapid feather loss in chickens causes treatment"}}]\n'
+            'Input: Why are my chickens losing feathers?\n'
+            'Output: {"action": "tool_call", "data": [{"function_name": "query_knowledge_base", "arguments": {"search_query": "feather loss chickens"}}], "confidence": 0.95}\n\n'
+            'Input: Hello!\n'
+            'Output: {"action": "respond", "text": "Hello! How can I assist you today?", "confidence": 0.99}\n\n'
+            'Input: List all my animals\n'
+            'Output: {"action": "tool_call", "data": [{"function_name": "list_animals", "arguments": {}}], "confidence": 0.98}'
         )
     }
 
@@ -342,14 +421,21 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
     text_pass1 = response_pass1["choices"][0]["message"]["content"].strip()
     print("[llm_engine] Pass 1 Raw Output:", text_pass1)
 
-    is_tool_call, tool_calls = parse_tool_calls(text_pass1)
+    is_tool_call, parsed_result = parse_tool_calls(text_pass1)
     final_text = text_pass1
+
+    # Check for direct responses from new format
+    if not is_tool_call and parsed_result:
+        if "_direct_response" in parsed_result[0]:
+            return parsed_result[0]["_direct_response"]
+        if "_error" in parsed_result[0]:
+            return f"Error: {parsed_result[0]['_error']}"
 
     # PASS 2: Aggressive Grammar Catch
     is_greeting = final_text.strip().lower().startswith("hello") or is_simple_greeting(messages)
     if not is_tool_call and not is_greeting:
         print("[llm_engine] Pass 1 failed to route. Enforcing Grammar Pass 2...")
-        grammar = get_llama_grammar()
+        grammar = get_response_grammar()
         response_pass2 = llm.create_chat_completion(
             messages=full_messages,
             max_tokens=512,
@@ -359,8 +445,19 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         )
         text_pass2 = response_pass2["choices"][0]["message"]["content"].strip()
         print("[llm_engine] Pass 2 Grammar Output:", text_pass2)
-        is_tool_call, tool_calls = parse_tool_calls(text_pass2)
+        is_tool_call, parsed_result = parse_tool_calls(text_pass2)
+
+        # Check for direct responses in Pass 2
+        if not is_tool_call and parsed_result:
+            if "_direct_response" in parsed_result[0]:
+                return parsed_result[0]["_direct_response"]
+            if "_error" in parsed_result[0]:
+                return f"Error: {parsed_result[0]['_error']}"
+
         final_text = text_pass2
+
+    # Extract tool calls from parsed result
+    tool_calls = [t for t in parsed_result if isinstance(t, dict) and "function_name" in t]
 
     # Execution Phase & Pass 3 Synthesis
     if is_tool_call and tool_calls:
@@ -400,7 +497,5 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         
         return sanitize_response(synth_text)
 
-    if not is_tool_call and not is_greeting:
-        return "I encountered an error mapping that request. Could you rephrase it?"
-
-    return sanitize_response(final_text)
+    # Fallback for non-tool, non-greeting inputs that couldn't be parsed
+    return "I couldn't understand that request. Try asking about your farm animals, expenditures, health logs, or general farming questions."

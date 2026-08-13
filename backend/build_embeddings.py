@@ -11,7 +11,7 @@ from rag_pipeline import OfflineVectorEmbedder
 
 # Directory paths
 BASE_DIR = Path(__file__).resolve().parent
-KNOWLEDGE_BASE_DIR = Path("/mnt/C6EE65A1EE658B0F/WORKEST/Agro-AI/data/raw/")
+KNOWLEDGE_BASE_DIR = Path("/mnt/C6EE65A1EE658B0F/WORKEST/Agro-AI/data/raw/Animal/")
 MODELS_DIR = BASE_DIR / "models"
 INDEX_PATH = MODELS_DIR / "vector_store.index"
 FASTEMBED_CACHE_DIR = MODELS_DIR / "fastembed_cache"
