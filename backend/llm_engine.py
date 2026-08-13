@@ -26,83 +26,6 @@ GREETING_KEYWORDS = {
     "how far", "habari", "sannu", "kedu", "greeting", "greetings"
 }
 
-COMPRESSION_THRESHOLD = 3000
-COMPRESSION_TARGET = 1000
-
-_thread_token_counts: Dict[str, int] = {}
-
-
-def estimate_tokens(text: str) -> int:
-    return len(text) // 4
-
-
-def extractive_summary(messages: List[Dict], max_tokens: int = COMPRESSION_TARGET) -> str:
-    """Extract key sentences using TF-IDF-like scoring."""
-    all_text = ""
-    for m in messages:
-        role = m.get("role", "user")
-        content = m.get("content", "")
-        all_text += f"{role}: {content}\n"
-
-    sentences = all_text.replace("\n", ". ").split(". ")
-    if len(sentences) <= 4:
-        return all_text
-
-    scored = []
-    for sent in sentences:
-        if len(sent) < 10:
-            continue
-        score = len(sent) // 10
-        for other in sentences:
-            if sent != other and sent in other:
-                score -= 1
-        scored.append((score, sent))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    selected = [s for _, s in scored[:6]]
-    selected.sort(key=lambda s: all_text.find(s))
-
-    summary = ". ".join(selected)
-    if len(summary) > max_tokens * 4:
-        summary = summary[:max_tokens * 4]
-    return summary
-
-
-def compress_thread_messages(messages: List[Dict], thread_id: str) -> List[Dict]:
-    """Compress conversation history, prepend summary to system prompt."""
-    if not messages:
-        return messages
-
-    has_system = messages[0].get("role") == "system"
-    if has_system and len(messages) <= 4:
-        return messages
-
-    summary = extractive_summary(messages[1:] if has_system else messages)
-
-    new_messages = []
-    if has_system:
-        original_system = messages[0]
-        new_system = {
-            "role": "system",
-            "content": original_system["content"]
-            + f"\n\n[Prior conversation summary: {summary}]"
-        }
-        new_messages.append(new_system)
-    else:
-        new_messages.append({
-            "role": "system",
-            "content": f"[Prior conversation summary: {summary}]"
-        })
-
-    last_4 = messages[-4:] if len(messages) > 4 else messages
-    for m in last_4:
-        if has_system and m == messages[0]:
-            continue
-        new_messages.append(m)
-
-    print(f"[llm_engine] Compressed thread {thread_id[:8]}: {len(messages)} → {len(new_messages)} messages")
-    return new_messages
-
 
 def build_tools_json_schema() -> Dict[str, Any]:
     tool_names = list(TOOL_MAP.keys())
@@ -125,55 +48,12 @@ def build_tools_json_schema() -> Dict[str, Any]:
     }
 
 
-def build_response_json_schema() -> Dict[str, Any]:
-    """Schema for constrained JSON responses from Pass 1."""
-    tool_names = list(TOOL_MAP.keys())
-    return {
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["tool_call", "respond", "error"]
-            },
-            "data": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "function_name": {"type": "string", "enum": tool_names},
-                        "arguments": {"type": "object"}
-                    },
-                    "required": ["function_name", "arguments"],
-                    "additionalProperties": False
-                }
-            },
-            "text": {"type": "string"},
-            "message": {"type": "string"},
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
-        },
-        "required": ["action"],
-        "additionalProperties": False
-    }
-
-
 def get_llama_grammar() -> LlamaGrammar:
     global _llama_grammar_instance
     if _llama_grammar_instance is None:
         schema_str = json.dumps(build_tools_json_schema())
         _llama_grammar_instance = LlamaGrammar.from_json_schema(schema_str)
     return _llama_grammar_instance
-
-
-_response_grammar_instance = None
-
-
-def get_response_grammar() -> LlamaGrammar:
-    """Grammar for constrained JSON responses (action/data/text format)."""
-    global _response_grammar_instance
-    if _response_grammar_instance is None:
-        schema_str = json.dumps(build_response_json_schema())
-        _response_grammar_instance = LlamaGrammar.from_json_schema(schema_str)
-    return _response_grammar_instance
 
 
 def get_llm() -> Optional[Llama]:
@@ -194,51 +74,25 @@ def get_llm() -> Optional[Llama]:
 
 
 def parse_tool_calls(output_text: str) -> Tuple[bool, List[Dict[str, Any]]]:
-    """Parse both legacy and new JSON response formats."""
     clean_text = output_text.strip()
+    if not (clean_text.startswith("[") and "function_name" in clean_text):
+        return False, []
 
-    # Try new format: {"action": "tool_call", "data": [...]}
-    if clean_text.startswith("{"):
-        try:
-            data = json.loads(clean_text)
-            if isinstance(data, dict):
-                action = data.get("action")
-                if action == "tool_call" and "data" in data:
-                    tool_calls = []
-                    for item in data.get("data", []):
-                        if isinstance(item, dict) and "function_name" in item:
-                            fn_name = item["function_name"]
-                            if fn_name in TOOL_MAP:
-                                args = item.get("arguments", {})
-                                tool_calls.append({"function_name": fn_name, "arguments": args})
-                    if tool_calls:
-                        return True, tool_calls
-                elif action == "respond":
-                    # Direct response - return special marker
-                    return False, [{"_direct_response": data.get("text", ""), "_confidence": data.get("confidence", 0.9)}]
-                elif action == "error":
-                    return False, [{"_error": data.get("message", "Unknown error")}]
-        except Exception:
-            pass
+    try:
+        data = json.loads(clean_text)
+        if isinstance(data, list) and len(data) > 0:
+            valid_calls = []
+            for item in data:
+                if isinstance(item, dict) and "function_name" in item and item["function_name"] in TOOL_MAP:
+                    args = item.get("arguments", {})
+                    if not args:
+                        args = {k: v for k, v in item.items() if k != "function_name"}
+                    valid_calls.append({"function_name": item["function_name"], "arguments": args})
 
-    # Try legacy format: [{"function_name": ...}]
-    if clean_text.startswith("[") and "function_name" in clean_text:
-        try:
-            data = json.loads(clean_text)
-            if isinstance(data, list) and len(data) > 0:
-                valid_calls = []
-                for item in data:
-                    if isinstance(item, dict) and "function_name" in item and item["function_name"] in TOOL_MAP:
-                        args = item.get("arguments", {})
-                        if not args:
-                            args = {k: v for k, v in item.items() if k != "function_name"}
-                        valid_calls.append({"function_name": item["function_name"], "arguments": args})
-
-                if valid_calls:
-                    return True, valid_calls
-        except Exception:
-            pass
-
+            if valid_calls:
+                return True, valid_calls
+    except Exception:
+        pass
     return False, []
 
 
@@ -298,76 +152,37 @@ def get_text_only_grammar() -> LlamaGrammar:
 
 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, lang_directive: str) -> str:
-    """Two-pass: Extract facts first, then format into answer."""
-
-    # Pass 3a: Extract key facts
-    extract_prompt = {
+    """Pass 3: Pure data extraction. Use grammar to force natural language."""
+    system_prompt = {
         "role": "system",
         "content": (
-            "You are a factual extractor. Read the reference material and extract 2-3 key facts relevant to the question.\n"
-            f"{lang_directive}\n"
-            "Output only simple facts as bullet points. No JSON. No tool calls."
+            "You are FarmHand AI. Answer the farmer's question in plain English.\n"
+            f"{lang_directive}\n\n"
+            "Write 1-3 sentences. Do not use brackets or code."
         )
     }
 
-    extract_user = {
+    user_prompt = {
         "role": "user",
-        "content": f"Reference:\n{context_data}\n\nQuestion: {user_question}\n\nKey facts:"
+        "content": f"Context: {context_data}\n\nQuestion: {user_question}\n\nAnswer:"
     }
 
-    response1 = llm.create_chat_completion(
-        messages=[extract_prompt, extract_user],
-        max_tokens=256,
-        temperature=0.1,
-        stop=["<|im_end|>", "<|im_start|>", "[", "{"]
-    )
-    facts = response1["choices"][0]["message"]["content"].strip()
-    print(f"[llm_engine] Pass 3a facts: {facts[:100]}")
-
-    # If extraction returned JSON, use raw context
-    if facts.startswith("[") or facts.startswith("{") or not facts:
-        facts = context_data[:500]
-
-    # Pass 3b: Format into final answer
-    format_prompt = {
-        "role": "system",
-        "content": (
-            "You are FarmHand AI, a helpful farming assistant.\n"
-            f"{lang_directive}\n"
-            "Give a direct, friendly answer in 1-3 sentences. If you don't know, say so."
-        )
-    }
-
-    format_user = {
-        "role": "user",
-        "content": f"Facts: {facts}\n\nQuestion: {user_question}\n\nAnswer:"
-    }
-
-    response2 = llm.create_chat_completion(
-        messages=[format_prompt, format_user],
-        max_tokens=256,
+    response = llm.create_chat_completion(
+        messages=[system_prompt, user_prompt],
+        max_tokens=384,
         temperature=0.2,
+        grammar=get_text_only_grammar(),
         stop=["<|im_end|>", "<|im_start|>", "[", "{"]
     )
-    answer = response2["choices"][0]["message"]["content"].strip()
-    print(f"[llm_engine] Pass 3b answer: {answer[:100]}")
+    raw_output = response["choices"][0]["message"]["content"].strip()
 
-    return answer if answer else "I found relevant information but couldn't format the response."
+    if raw_output.startswith("[") or raw_output.startswith("{"):
+        return "I found relevant information but had trouble formatting it. Could you rephrase your question?"
+
+    return raw_output
 
 
-def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: str = None) -> str:
-    global _thread_token_counts
-
-    if thread_id:
-        total_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
-        if total_tokens > COMPRESSION_THRESHOLD:
-            messages = compress_thread_messages(messages, thread_id)
-            new_total = sum(estimate_tokens(m.get("content", "")) for m in messages)
-            _thread_token_counts[thread_id] = new_total
-            print(f"[llm_engine] Compressed thread {thread_id[:8]}: {total_tokens} → {new_total} tokens")
-        else:
-            _thread_token_counts[thread_id] = total_tokens
-
+def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm") -> str:
     llm = get_llm()
     if llm is None:
         return mock_router(messages)
@@ -383,15 +198,9 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         "role": "system",
         "content": (
             "You are FarmHand AI, a strict backend routing agent.\n"
-            "OUTPUT FORMAT: You MUST output valid JSON in one of these formats:\n\n"
-            '1. Tool Call: {"action": "tool_call", "data": [{"function_name": "tool_name", "arguments": {...}}], "confidence": 0.95}\n'
-            '2. Direct Response: {"action": "respond", "text": "Your answer here", "confidence": 0.9}\n'
-            '3. Error: {"action": "error", "message": "Error message", "confidence": 1.0}\n\n'
             "RULES:\n"
-            "- Always output valid JSON, never plain text\n"
-            "- For knowledge queries, use query_knowledge_base tool\n"
-            "- For greetings, use action: respond with text: greeting\n"
-            "- Include confidence score (0-1)\n\n"
+            "1. Output ONLY a JSON array matching available tools to route the user's request.\n"
+            "2. For query_knowledge_base, extract core keywords.\n\n"
             "TOOLS:\n"
             "- list_animals()\n"
             "- get_animal_record(id: str)\n"
@@ -400,43 +209,31 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
             "- write_health_log(animal_id: str, event_type: str, notes: str)\n"
             "- query_knowledge_base(search_query: str)\n\n"
             "EXAMPLES:\n"
-            'Input: Why are my chickens losing feathers?\n'
-            'Output: {"action": "tool_call", "data": [{"function_name": "query_knowledge_base", "arguments": {"search_query": "feather loss chickens"}}], "confidence": 0.95}\n\n'
-            'Input: Hello!\n'
-            'Output: {"action": "respond", "text": "Hello! How can I assist you today?", "confidence": 0.99}\n\n'
-            'Input: List all my animals\n'
-            'Output: {"action": "tool_call", "data": [{"function_name": "list_animals", "arguments": {}}], "confidence": 0.98}'
+            "Input: Why are my chickens losing their feathers rapidly?\n"
+            'Output: [{"function_name": "query_knowledge_base", "arguments": {"search_query": "rapid feather loss in chickens causes treatment"}}]\n'
         )
     }
 
     full_messages = [system_message] + messages
 
-    # PASS 1: Grammar-constrained to enforce JSON format
+    # PASS 1: Native Chat Completion API
     response_pass1 = llm.create_chat_completion(
         messages=full_messages,
         max_tokens=512,
         temperature=0.0,
-        grammar=get_response_grammar(),
         stop=["<|im_end|>", "<|im_start|>"]
     )
     text_pass1 = response_pass1["choices"][0]["message"]["content"].strip()
     print("[llm_engine] Pass 1 Raw Output:", text_pass1)
 
-    is_tool_call, parsed_result = parse_tool_calls(text_pass1)
+    is_tool_call, tool_calls = parse_tool_calls(text_pass1)
     final_text = text_pass1
-
-    # Check for direct responses from new format
-    if not is_tool_call and parsed_result:
-        if "_direct_response" in parsed_result[0]:
-            return parsed_result[0]["_direct_response"]
-        if "_error" in parsed_result[0]:
-            return f"Error: {parsed_result[0]['_error']}"
 
     # PASS 2: Aggressive Grammar Catch
     is_greeting = final_text.strip().lower().startswith("hello") or is_simple_greeting(messages)
     if not is_tool_call and not is_greeting:
         print("[llm_engine] Pass 1 failed to route. Enforcing Grammar Pass 2...")
-        grammar = get_response_grammar()
+        grammar = get_llama_grammar()
         response_pass2 = llm.create_chat_completion(
             messages=full_messages,
             max_tokens=512,
@@ -446,19 +243,8 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         )
         text_pass2 = response_pass2["choices"][0]["message"]["content"].strip()
         print("[llm_engine] Pass 2 Grammar Output:", text_pass2)
-        is_tool_call, parsed_result = parse_tool_calls(text_pass2)
-
-        # Check for direct responses in Pass 2
-        if not is_tool_call and parsed_result:
-            if "_direct_response" in parsed_result[0]:
-                return parsed_result[0]["_direct_response"]
-            if "_error" in parsed_result[0]:
-                return f"Error: {parsed_result[0]['_error']}"
-
+        is_tool_call, tool_calls = parse_tool_calls(text_pass2)
         final_text = text_pass2
-
-    # Extract tool calls from parsed result
-    tool_calls = [t for t in parsed_result if isinstance(t, dict) and "function_name" in t]
 
     # Execution Phase & Pass 3 Synthesis
     if is_tool_call and tool_calls:
@@ -477,19 +263,13 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
                 rag_context_prompt = res["context_prompt"]
                 retrieved_chunks = res.get("retrieved_chunks", [])
 
-# PASS 3: RAG Answer Generation (two-pass: extract facts, then format)
+        # PASS 3: Totally Stateless Extraction
         if rag_context_prompt:
             if not retrieved_chunks:
                 return "I couldn't find any relevant information in the knowledge base to answer your question."
-
-            # Clean context to reduce confusion
-            clean_context = rag_context_prompt.replace("[{", "START ").replace("}]", " END")
-
-            rag_text = generate_stateless_answer(llm, clean_context, last_user_prompt, lang_directive)
-
-            if not rag_text or len(rag_text.strip()) < 5:
-                return "Error processing knowledge base response. Please rephrase your question."
-
+            
+            rag_text = generate_stateless_answer(llm, rag_context_prompt, last_user_prompt, lang_directive)
+            print(f"[llm_engine] RAG stateless output: {rag_text}")
             return sanitize_response(rag_text)
 
         # PASS 3: Database Stateless Extraction
@@ -498,5 +278,7 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
         
         return sanitize_response(synth_text)
 
-    # Fallback for non-tool, non-greeting inputs that couldn't be parsed
-    return "I couldn't understand that request. Try asking about your farm animals, expenditures, health logs, or general farming questions."
+    if not is_tool_call and not is_greeting:
+        return "I encountered an error mapping that request. Could you rephrase it?"
+
+    return sanitize_response(final_text)
