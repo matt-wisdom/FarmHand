@@ -1,11 +1,11 @@
 import json
-import math
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 import faiss
 import numpy as np
 
+import BM25
 from database import DB_PATH, get_db_connection
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -52,6 +52,9 @@ class OfflineVectorEmbedder:
 # Global singleton instances for fast inference
 _embedding_model: Any = None
 _faiss_index: Optional[faiss.Index] = None
+_bm25_retriever: Any = None
+
+BM25_INDEX_PATH = MODELS_DIR / "bm25_index"
 
 
 def get_embedding_model() -> Any:
@@ -160,60 +163,66 @@ def vector_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
     return results
 
 
+def get_bm25_retriever() -> Any:
+    """Load or build BM25 retriever."""
+    global _bm25_retriever
+    if _bm25_retriever is None:
+        if BM25_INDEX_PATH.exists():
+            print(f"[rag_pipeline] Loading BM25 index from {BM25_INDEX_PATH}")
+            _bm25_retriever = BM25.load(str(BM25_INDEX_PATH))
+        else:
+            print(f"[rag_pipeline] BM25 index not found. Run build_bm25_index.py first.")
+            return None
+    return _bm25_retriever
+
+
 def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-    """BM25 keyword-based search."""
-    query_terms = query.lower().split()
-    if not query_terms:
+    """BM25 keyword-based search using library."""
+    retriever = get_bm25_retriever()
+    if retriever is None:
         return []
 
+    results = retriever.search(query, k=top_k)
+
+    # Get chunk IDs from BM25 results
+    # BM25 library returns indices into the original corpus
+    chunk_ids = []
+    for r in results[0] if results else []:
+        if hasattr(r, 'corpus_idx'):
+            chunk_ids.append(r.corpus_idx + 1)  # BM25 uses 0-index
+        elif isinstance(r, dict) and 'corpus_idx' in r:
+            chunk_ids.append(r['corpus_idx'] + 1)
+
+    if not chunk_ids:
+        return []
+
+    # Fetch from database
+    placeholders = ",".join(["?"] * len(chunk_ids))
     with get_db_connection(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, filename, chunk_id, text FROM document_chunks")
-        all_chunks = list(cursor.fetchall())
+        cursor.execute(
+            f"SELECT id, filename, chunk_id, text FROM document_chunks WHERE id IN ({placeholders})",
+            chunk_ids
+        )
+        rows = {row["id"]: dict(row) for row in cursor.fetchall()}
 
-    if not all_chunks:
-        return []
-
-    # Calculate IDF for all terms in corpus
-    doc_count = len(all_chunks)
-    doc_freqs = {}
-    for chunk in all_chunks:
-        words = set(chunk["text"].lower().split())
-        for term in query_terms:
-            if term in words:
-                doc_freqs[term] = doc_freqs.get(term, 0) + 1
-
-    # Score each chunk
-    scores = []
-    for chunk in all_chunks:
-        chunk_text = chunk["text"].lower()
-        words = chunk_text.split()
-        word_count = len(words)
-
-        if word_count == 0:
+    # Map results back with scores
+    final_results = []
+    for i, r in enumerate(results[0]) if results else []:
+        if hasattr(r, 'corpus_idx'):
+            db_id = r.corpus_idx + 1
+        elif isinstance(r, dict) and 'corpus_idx' in r:
+            db_id = r['corpus_idx'] + 1
+        else:
             continue
 
-        score = 0.0
-        for term in query_terms:
-            term_freq = words.count(term)
-            if term_freq > 0:
-                idf = math.log((doc_count - doc_freqs.get(term, 0) + 0.5) / (doc_freqs.get(term, 0) + 0.5) + 1)
-                tf = (term_freq * (1.2 + 1)) / (term_freq + 1.2 * (1 - 0.75 + 0.75 * word_count / 100))
-                score += idf * tf
+        if db_id in rows:
+            item = rows[db_id]
+            item["score"] = r.score if hasattr(r, 'score') else r.get('score', 0)
+            item["bm25_rank"] = i
+            final_results.append(item)
 
-        if score > 0:
-            scores.append((score, chunk))
-
-    scores.sort(key=lambda x: x[0], reverse=True)
-
-    results = []
-    for rank, (score, chunk) in enumerate(scores[:top_k]):
-        item = dict(chunk)
-        item["score"] = score
-        item["bm25_rank"] = rank
-        results.append(item)
-
-    return results
+    return final_results
 
 
 def combine_results(bm25_results: List[Dict], vector_results: List[Dict], top_k: int) -> List[Dict]:

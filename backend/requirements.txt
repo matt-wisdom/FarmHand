@@ -41,3 +41,4 @@ llama-cpp-python>=0.3.0
 fastembed>=0.3.0
 faiss-cpu>=1.7.0
 pymupdf>=1.22.0
+bm25>=0.3.0
