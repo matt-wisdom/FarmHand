@@ -128,7 +128,7 @@ class ChatRequest(BaseModel):
     thread_id: str = Field(..., description="UUID of active chat thread")
     user_input: str = Field(..., description="User text prompt")
     farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
-    language: Optional[str] = Field("auto", description="Language: auto, english, hausa, pidgin")
+    language: Optional[str] = Field("english", description="Language: english, hausa, pidgin")
 
 
 class EditMessageRequest(BaseModel):
@@ -298,7 +298,7 @@ def chat_endpoint(payload: ChatRequest):
     thread_id = payload.thread_id
     user_input = payload.user_input.strip()
     farm_id = payload.farm_id or "default_farm"
-    language = payload.language or "auto"
+    language = payload.language or "english"
 
     if not user_input:
         raise HTTPException(status_code=400, detail="user_input cannot be empty.")

@@ -159,7 +159,7 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
     return f"Based on the provided information, {generated_text}"
 
 
-def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: Optional[str] = None, language: str = "auto") -> str:
+def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm", thread_id: Optional[str] = None, language: str = "english") -> str:
     llm = get_llm()
     if llm is None:
         return mock_router(messages)
@@ -170,18 +170,15 @@ def chat_completion(messages: List[Dict[str, str]], farm_id: str = "default_farm
     db_summary = get_system_context_summary(farm_id=farm_id)
     last_user_prompt = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
 
-    # Use explicit language selection or auto-detect
-    if language and language != "auto":
-        if language == "english":
-            lang_directive = "The user expects English. Respond in clear, professional English."
-        elif language == "hausa":
-            lang_directive = "The user expects Hausa. Respond in clear Hausa language."
-        elif language == "pidgin":
-            lang_directive = "The user expects Nigerian Pidgin. Respond in warm Nigerian Pidgin English."
-        else:
-            lang_directive = detect_language_instruction(last_user_prompt)
+    # Use explicit language selection
+    if language == "english":
+        lang_directive = "The user expects English. Respond in clear, professional English."
+    elif language == "hausa":
+        lang_directive = "The user expects Hausa. Respond in clear Hausa language."
+    elif language == "pidgin":
+        lang_directive = "The user expects Nigerian Pidgin. Respond in warm Nigerian Pidgin English."
     else:
-        lang_directive = detect_language_instruction(last_user_prompt)
+        lang_directive = "The user expects English. Respond in clear, professional English."
 
     system_message = {
         "role": "system",
