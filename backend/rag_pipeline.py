@@ -1,7 +1,8 @@
 import json
+import math
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 import faiss
 import numpy as np
 
@@ -97,14 +98,33 @@ def reload_faiss_index():
 
 def search_knowledge_base(search_query: str, top_k: int = 3) -> List[Dict[str, Any]]:
     """
-    Search vector index using FastEmbed (ONNX) or OfflineVectorEmbedder + FAISS CPU.
+    Hybrid search: BM25 keyword matching + FAISS vector similarity.
+    Combines both ranking methods for better precision.
     """
     faiss_idx = get_faiss_index()
     if faiss_idx is None or faiss_idx.ntotal == 0:
         return []
 
+    # Get BM25 results
+    bm25_results = bm25_search(search_query, top_k=top_k * 3)
+
+    # Get vector results
+    vector_results = vector_search(search_query, top_k=top_k * 3)
+
+    # Combine with weighted scoring
+    combined = combine_results(bm25_results, vector_results, top_k)
+
+    return combined[:top_k]
+
+
+def vector_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    """Pure vector similarity search."""
+    faiss_idx = get_faiss_index()
+    if faiss_idx is None or faiss_idx.ntotal == 0:
+        return []
+
     model = get_embedding_model()
-    formatted_query = f"query: {search_query}"
+    formatted_query = f"query: {query}"
     query_vector = list(model.embed([formatted_query]))[0]
 
     query_np = np.array([query_vector], dtype=np.float32)
@@ -118,7 +138,6 @@ def search_knowledge_base(search_query: str, top_k: int = 3) -> List[Dict[str, A
         if not hit_ids:
             return []
 
-        # Map FAISS 0-indexed IDs to SQLite 1-indexed document_chunks.id
         sqlite_ids = [faiss_id + 1 for faiss_id in hit_ids]
         placeholders = ",".join(["?"] * len(sqlite_ids))
 
@@ -135,9 +154,98 @@ def search_knowledge_base(search_query: str, top_k: int = 3) -> List[Dict[str, A
             if db_id in rows:
                 item = rows[db_id]
                 item["score"] = float(dist)
+                item["vector_rank"] = results.__len__()
                 results.append(item)
 
     return results
+
+
+def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    """BM25 keyword-based search."""
+    query_terms = query.lower().split()
+    if not query_terms:
+        return []
+
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, filename, chunk_id, text FROM document_chunks")
+        all_chunks = list(cursor.fetchall())
+
+    if not all_chunks:
+        return []
+
+    # Calculate IDF for all terms in corpus
+    doc_count = len(all_chunks)
+    doc_freqs = {}
+    for chunk in all_chunks:
+        words = set(chunk["text"].lower().split())
+        for term in query_terms:
+            if term in words:
+                doc_freqs[term] = doc_freqs.get(term, 0) + 1
+
+    # Score each chunk
+    scores = []
+    for chunk in all_chunks:
+        chunk_text = chunk["text"].lower()
+        words = chunk_text.split()
+        word_count = len(words)
+
+        if word_count == 0:
+            continue
+
+        score = 0.0
+        for term in query_terms:
+            term_freq = words.count(term)
+            if term_freq > 0:
+                idf = math.log((doc_count - doc_freqs.get(term, 0) + 0.5) / (doc_freqs.get(term, 0) + 0.5) + 1)
+                tf = (term_freq * (1.2 + 1)) / (term_freq + 1.2 * (1 - 0.75 + 0.75 * word_count / 100))
+                score += idf * tf
+
+        if score > 0:
+            scores.append((score, chunk))
+
+    scores.sort(key=lambda x: x[0], reverse=True)
+
+    results = []
+    for rank, (score, chunk) in enumerate(scores[:top_k]):
+        item = dict(chunk)
+        item["score"] = score
+        item["bm25_rank"] = rank
+        results.append(item)
+
+    return results
+
+
+def combine_results(bm25_results: List[Dict], vector_results: List[Dict], top_k: int) -> List[Dict]:
+    """Combine BM25 and vector results with weighted scoring."""
+    if not bm25_results:
+        return vector_results[:top_k]
+    if not vector_results:
+        return bm25_results[:top_k]
+
+    # Normalize scores
+    max_bm25 = max(r["score"] for r in bm25_results) if bm25_results else 1
+    max_vector = max(r["score"] for r in vector_results) if vector_results else 1
+
+    # Build score map
+    score_map = {}
+    for r in bm25_results:
+        key = r["id"]
+        norm_score = r["score"] / max_bm25 if max_bm25 > 0 else 0
+        score_map[key] = {"data": r, "combined": norm_score * 0.6}
+
+    for r in vector_results:
+        key = r["id"]
+        norm_score = r["score"] / max_vector if max_vector > 0 else 0
+        if key in score_map:
+            score_map[key]["combined"] += norm_score * 0.4
+        else:
+            score_map[key] = {"data": r, "combined": norm_score * 0.4}
+
+    # Sort by combined score
+    sorted_results = sorted(score_map.values(), key=lambda x: x["combined"], reverse=True)
+
+    return [item["data"] for item in sorted_results[:top_k]]
 
 
 def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
