@@ -104,18 +104,33 @@ def search_knowledge_base(search_query: str, top_k: int = 3) -> List[Dict[str, A
     Hybrid search: BM25 keyword matching + FAISS vector similarity.
     Combines both ranking methods for better precision.
     """
+    print(f"[rag_pipeline] search_knowledge_base query: '{search_query}' top_k: {top_k}")
+
     faiss_idx = get_faiss_index()
+    print(f"[rag_pipeline] FAISS index total: {faiss_idx.ntotal if faiss_idx else 'None'}")
+
     if faiss_idx is None or faiss_idx.ntotal == 0:
+        print("[rag_pipeline] WARNING: FAISS index empty or None!")
         return []
 
     # Get BM25 results
+    print(f"[rag_pipeline] Running BM25 search...")
     bm25_results = bm25_search(search_query, top_k=top_k * 3)
+    print(f"[rag_pipeline] BM25 results count: {len(bm25_results)}")
+    if bm25_results:
+        print(f"[rag_pipeline] BM25 top result: {bm25_results[0].get('text', '')[:100]}...")
 
     # Get vector results
+    print(f"[rag_pipeline] Running vector search...")
     vector_results = vector_search(search_query, top_k=top_k * 3)
+    print(f"[rag_pipeline] Vector results count: {len(vector_results)}")
+    if vector_results:
+        print(f"[rag_pipeline] Vector top result: {vector_results[0].get('text', '')[:100]}...")
 
     # Combine with weighted scoring
+    print(f"[rag_pipeline] Combining results...")
     combined = combine_results(bm25_results, vector_results, top_k)
+    print(f"[rag_pipeline] Combined results count: {len(combined)}")
 
     return combined[:top_k]
 
@@ -179,26 +194,46 @@ def get_bm25_retriever() -> Any:
 
 def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
     """BM25 keyword-based search using library."""
+    print(f"[rag_pipeline] BM25 search called with query: '{query}'")
+
     retriever = get_bm25_retriever()
     if retriever is None:
+        print("[rag_pipeline] BM25 retriever is None!")
         return []
 
     # Tokenize query
     import Stemmer
     stemmer = Stemmer.Stemmer("english")
+    print(f"[rag_pipeline] Tokenizing query...")
     query_tokens = bm25s.tokenize([query], stemmer=stemmer)
+    print(f"[rag_pipeline] Query tokens: {query_tokens}")
 
     # Search
+    print(f"[rag_pipeline] Running BM25.retrieve()...")
     results = retriever.retrieve(query_tokens)
+    print(f"[rag_pipeline] BM25 results type: {type(results)}, len: {len(results) if results else 0}")
 
     # Get indices and scores
     if not results or not results[0]:
+        print("[rag_pipeline] BM25 results empty!")
         return []
 
     # Extract corpus indices from results
-    # bm25s returns a Scores object with doc_indices and scores
-    doc_indices = results[0].doc_indices[0] if hasattr(results[0], 'doc_indices') else list(range(min(top_k, len(results[0].scores[0]))))
+    print(f"[rag_pipeline] Results[0] type: {type(results[0])}")
+    print(f"[rag_pipeline] Results[0] attrs: {dir(results[0])}")
+
+    # Try different ways to get indices
+    if hasattr(results[0], 'doc_indices'):
+        doc_indices = results[0].doc_indices[0]
+        print(f"[rag_pipeline] Got doc_indices: {doc_indices}")
+    elif hasattr(results[0], 'indices'):
+        doc_indices = results[0].indices[0]
+    else:
+        doc_indices = list(range(min(top_k, len(results[0].scores[0]) if hasattr(results[0], 'scores') else 0)))
+        print(f"[rag_pipeline] Using fallback indices: {doc_indices}")
+
     scores = results[0].scores[0] if hasattr(results[0], 'scores') else []
+    print(f"[rag_pipeline] Scores: {scores[:5] if scores else 'None'}")
 
     # Map to chunk IDs (BM25 index order matches chunk order in DB)
     with get_db_connection(DB_PATH) as conn:
@@ -258,9 +293,12 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
     Tool function executed by tool_registry.
     Performs vector search, constructs strict prompt context, and returns retrieval output.
     """
+    print(f"[rag_pipeline] query_knowledge_base called with: '{search_query}'")
     chunks = search_knowledge_base(search_query, top_k=top_k)
+    print(f"[rag_pipeline] query_knowledge_base got {len(chunks)} chunks")
 
     if not chunks:
+        print("[rag_pipeline] WARNING: No chunks found!")
         return {
             "status": "empty",
             "message": f"No relevant documentation found for query '{search_query}'.",
