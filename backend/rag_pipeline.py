@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import faiss
 import numpy as np
 
-import BM25
+import bm25s
 from database import DB_PATH, get_db_connection
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -167,9 +167,10 @@ def get_bm25_retriever() -> Any:
     """Load or build BM25 retriever."""
     global _bm25_retriever
     if _bm25_retriever is None:
-        if BM25_INDEX_PATH.exists():
-            print(f"[rag_pipeline] Loading BM25 index from {BM25_INDEX_PATH}")
-            _bm25_retriever = BM25.load(str(BM25_INDEX_PATH))
+        save_path = MODELS_DIR / "bm25_model"
+        if save_path.exists():
+            print(f"[rag_pipeline] Loading BM25 index from {save_path}")
+            _bm25_retriever = bm25s.BM25.load(str(save_path))
         else:
             print(f"[rag_pipeline] BM25 index not found. Run build_bm25_index.py first.")
             return None
@@ -182,43 +183,38 @@ def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
     if retriever is None:
         return []
 
-    results = retriever.search(query, k=top_k)
+    # Tokenize query
+    import Stemmer
+    stemmer = Stemmer.Stemmer("english")
+    query_tokens = bm25s.tokenize([query], stemmer=stemmer)
 
-    # Get chunk IDs from BM25 results
-    # BM25 library returns indices into the original corpus
-    chunk_ids = []
-    for r in results[0] if results else []:
-        if hasattr(r, 'corpus_idx'):
-            chunk_ids.append(r.corpus_idx + 1)  # BM25 uses 0-index
-        elif isinstance(r, dict) and 'corpus_idx' in r:
-            chunk_ids.append(r['corpus_idx'] + 1)
+    # Search
+    results = retriever.retrieve(query_tokens)
 
-    if not chunk_ids:
+    # Get indices and scores
+    if not results or not results[0]:
         return []
 
-    # Fetch from database
-    placeholders = ",".join(["?"] * len(chunk_ids))
+    # Extract corpus indices from results
+    # bm25s returns a Scores object with doc_indices and scores
+    doc_indices = results[0].doc_indices[0] if hasattr(results[0], 'doc_indices') else list(range(min(top_k, len(results[0].scores[0]))))
+    scores = results[0].scores[0] if hasattr(results[0], 'scores') else []
+
+    # Map to chunk IDs (BM25 index order matches chunk order in DB)
     with get_db_connection(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"SELECT id, filename, chunk_id, text FROM document_chunks WHERE id IN ({placeholders})",
-            chunk_ids
-        )
-        rows = {row["id"]: dict(row) for row in cursor.fetchall()}
+        cursor.execute("SELECT id, filename, chunk_id, text FROM document_chunks ORDER BY id")
+        all_chunks = list(cursor.fetchall())
 
-    # Map results back with scores
+    if not all_chunks:
+        return []
+
+    # Get top-k results
     final_results = []
-    for i, r in enumerate(results[0]) if results else []:
-        if hasattr(r, 'corpus_idx'):
-            db_id = r.corpus_idx + 1
-        elif isinstance(r, dict) and 'corpus_idx' in r:
-            db_id = r['corpus_idx'] + 1
-        else:
-            continue
-
-        if db_id in rows:
-            item = rows[db_id]
-            item["score"] = r.score if hasattr(r, 'score') else r.get('score', 0)
+    for i, idx in enumerate(doc_indices[:top_k]):
+        if idx < len(all_chunks):
+            item = dict(all_chunks[idx])
+            item["score"] = float(scores[i]) if i < len(scores) else 0.0
             item["bm25_rank"] = i
             final_results.append(item)
 
