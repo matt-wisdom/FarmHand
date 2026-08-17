@@ -66,6 +66,9 @@ def convert_pidgin_to_clean_english(text: str) -> str:
     replacements = [
         (r'\bna well-well\b', 'I understand'),
         (r'\bna properly\b', 'I understand'),
+        (r'\bna likely\b', 'It is likely'),
+        (r'\be be\b', 'It can be'),
+        (r'\be fit be\b', 'It can be'),
         (r'\bi go fit help you with\b', 'I can help you with'),
         (r'\bi go fit help you\b', 'I can help you'),
         (r'\bi go help you\b', 'I will help you'),
@@ -80,12 +83,14 @@ def convert_pidgin_to_clean_english(text: str) -> str:
         (r'\bwell-quick-quick\b', 'quickly'),
         (r'\bno fit\b', 'cannot'),
         (r'\bno dey\b', 'does not'),
+        (r'\bno let\b', 'do not let'),
         (r'\bdey show say\b', 'shows that'),
         (r'\bdey enter for pen\b', 'in the pen'),
         (r'\bdey recorded for\b', 'recorded in'),
         (r'\bdey come from\b', 'comes from'),
         (r'\bdey cause am\b', 'causes it'),
         (r'\bdey cause\b', 'causes'),
+        (r'\bblister dey come\b', 'blisters come'),
         (r'\bwey dey\b', 'that is'),
         (r'\bna so\b', 'that is correct'),
         (r'\babeg\b', 'please'),
@@ -94,10 +99,13 @@ def convert_pidgin_to_clean_english(text: str) -> str:
         (r'\byou fit\b', 'you can'),
         (r'\byou get\b', 'you have'),
         (r'\byou suppose\b', 'you should'),
+        (r'\bfit trigger am\b', 'can trigger it'),
+        (r'\btrigger am\b', 'trigger it'),
         (r'\bif you get\b', 'if you have'),
         (r'\bif dem dey\b', 'if they are'),
         (r'\bdem dey\b', 'they are'),
         (r'\bdem be\b', 'it may be'),
+        (r'\be dey worse\b', 'it gets worse'),
         (r'\be go worse\b', 'it will get worse'),
         (r'\be go\b', 'it will'),
         (r'\bdey worse\b', 'get worse'),
@@ -247,17 +255,22 @@ def chat_completion(
     farm_species = farm["farm_type"] if farm and farm.get("farm_type") else "General"
     species_scope = farm_species if farm_species.lower() != "general" else ""
 
-    # Step 4: Contextualized RAG retrieval (< 0.05s)
-    # Formulate search query using recent conversation turns if follow-up
+    # Step 4: Selective High-Relevance RAG Retrieval
     rag_context = ""
-    if len(current_query_en) > 3:
-        context_keywords = [m.get("content", "") for m in effective_messages[-3:] if m.get("role") == "user"]
-        combined_query = f"{species_scope} " + " ".join(context_keywords)
-        rag_hits = search_knowledge_base(combined_query.strip(), top_k=2)
-        if rag_hits:
-            snippets = [f"[{h.get('filename', 'Doc')}]: {h.get('text', '')[:300]}" for h in rag_hits]
-            rag_context = "\n---\n".join(snippets)
-            print(f"[llm_engine] Retrieved {len(rag_hits)} RAG context chunks.")
+    if len(current_query_en) > 5:
+        rag_hits = search_knowledge_base(f"{species_scope} {current_query_en}".strip(), top_k=2)
+        # Only include if relevant (not general policy or unrelated animals)
+        filtered_snippets = []
+        irrelevant_terms = ["gender analysis", "ex-ante", "rendille", "theileria", "macro-economic"]
+        for h in rag_hits:
+            text = h.get("text", "")
+            filename = h.get("filename", "").lower()
+            if not any(term in text.lower() or term in filename for term in irrelevant_terms):
+                if len(text) > 50:
+                    filtered_snippets.append(f"[{h.get('filename', 'Ref')}]: {text[:250]}")
+        if filtered_snippets:
+            rag_context = "\n---\n".join(filtered_snippets)
+            print(f"[llm_engine] High-relevance RAG context chunks: {len(filtered_snippets)}")
 
     # Step 5: Load LLM with Logit Bias
     llm = get_llm()
@@ -265,16 +278,13 @@ def chat_completion(
         return "[Fallback] Model not loaded."
 
     knowledge_section = f"\nVETERINARY REFERENCE CONTEXT:\n{rag_context}\n" if rag_context.strip() else ""
-    species_rule = f"Active Farm: {farm.get('name', 'Farm')} ({farm_species}). Answer specifically for {farm_species}." if species_scope else "Answer the farming question directly."
+    species_rule = f"Active Farm: {farm.get('name', 'Farm')} ({farm_species})." if species_scope else ""
 
     system_prompt = (
-        "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
+        "You are FarmHand AI, an expert agricultural and veterinary advisor for farmers.\n"
         f"{species_rule}\n"
-        "Respond in clear, concise, professional English.\n"
-        "GUIDELINES:\n"
-        "- Answer the question directly and stay strictly on the topic asked.\n"
-        "- Do NOT change the subject or discuss unrelated diseases.\n"
-        "- Do NOT output random numbers, JSON brackets, or code."
+        "When the farmer describes symptoms, diseases, or questions, answer directly with practical clinical causes, first aid, and prevention steps in plain English.\n"
+        "Do NOT change the subject. Do NOT output random numbers, JSON brackets, or code."
         f"{knowledge_section}"
     )
 
@@ -292,8 +302,8 @@ def chat_completion(
     gen_start = time.time()
     response = llm(
         full_prompt,
-        max_tokens=160,
-        temperature=0.2,
+        max_tokens=150,
+        temperature=0.1,
         logit_bias=_anti_json_logit_bias,
         stop=["<|im_end|>", "<|im_start|>", "\n\nUser:", "Farmer:"]
     )
@@ -307,7 +317,6 @@ def chat_completion(
     if norm_lang == "hausa":
         print(f"[llm_engine] Translating cleaned response to Hausa...")
         ha_translated = translate_en_to_ha(final_output)
-        # Check if MarianMT generated Tanzil/Biblical religious text artifacts
         religious_artifacts = ["littafi mai tsarki", "ãdalci", "sikẽlin", "la'ĩmi", "al'ummai", "karin magana"]
         if any(art in ha_translated.lower() for art in religious_artifacts):
             print(f"[llm_engine] Detected MarianMT religious artifact in translation. Using clean advisory format.")
