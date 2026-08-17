@@ -62,12 +62,14 @@ def list_animals(species: str = "", farm_id: str = "default_farm", date_str: str
 def register_flock(species: str, count: int, notes: str = "", event_type: str = "count_update", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Record a flock count update, purchase, or mortality into the flock ledger."""
     import database
+    evt = event_type.lower().strip() if event_type else "count_update"
+    is_delta = evt in ("purchase", "mortality", "sale", "loss", "addition") or int(count) < 0
     entry = database.record_flock_event(
         farm_id=farm_id,
         species=species,
-        count_change=count if event_type in ("purchase", "mortality", "sale") else 0,
-        exact_total=count if event_type not in ("purchase", "mortality", "sale") else None,
-        event_type=event_type,
+        count_change=int(count) if is_delta else 0,
+        exact_total=int(count) if not is_delta else None,
+        event_type=evt,
         notes=notes
     )
     return {"status": "success", "entry": entry, "new_total": entry["new_total"]}

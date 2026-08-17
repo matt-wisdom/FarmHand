@@ -174,110 +174,6 @@ def handle_fast_intent(query: str, language: str) -> Optional[str]:
     return "Hello! I am FarmHand AI, your digital agricultural assistant. How can I assist you with your livestock, poultry, or farm operations today?"
 
 
-def parse_date_reference(text: str) -> str:
-    import datetime
-    t = text.lower()
-    today = datetime.date.today()
-    if 'yesterday' in t:
-        return str(today - datetime.timedelta(days=1))
-    match_iso = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', t)
-    if match_iso:
-        return match_iso.group(1)
-    match_month = re.search(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b', t)
-    if match_month:
-        month_map = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
-        m = month_map[match_month.group(1)[:3]]
-        d = int(match_month.group(2))
-        return f'{today.year:04d}-{m:02d}-{d:02d}'
-    return str(today)
-
-
-def handle_flock_ledger_query(query: str, farm_id: str, language: str = "english") -> Optional[str]:
-    """
-    Directly handles conversational flock ledger actions:
-    - Setting / initializing flock count ("I have 5 chickens")
-    - Adding purchases ("I bought 10 chickens")
-    - Recording mortality/losses ("2 chickens died")
-    - Checking current count ("How many animals do I have?")
-    - Historical queries ("How many chickens did I have on August 10?")
-    """
-    q = query.lower().strip()
-    farm = get_farm_by_id(farm_id)
-    farm_name = farm['name'] if farm else 'your farm'
-
-    # 1. Losses / Mortality / Sales (e.g. '2 chickens died', 'sold 5 goats')
-    mort_match = re.search(r'(\d+)\s+([a-zA-Z]+)\s+(?:died|dead|sick|lost|slaughtered)', q) or re.search(r'(?:sold|lost|slaughtered|died)\s+(\d+)\s+([a-zA-Z]+)', q)
-    if mort_match:
-        num = int(mort_match.group(1))
-        species_str = mort_match.group(2)
-        event = 'mortality' if ('die' in q or 'dead' in q or 'lost' in q) else 'sale'
-        entry = record_flock_event(farm_id=farm_id, species=species_str, count_change=-num, event_type=event, notes=query)
-        if language == 'hausa':
-            return f"An rubuta: An cire {species_str} {num} ({event}) a bayanan gonarku ({farm_name}). Yawan su a yanzu: {entry['new_total']}."
-        elif language == 'pidgin':
-            return f"Recorded: We don remove {num} {species_str} for your records ({farm_name}). Your current total na {entry['new_total']}."
-        return f"Recorded: Logged {event} of {num} {entry['species']}. Your current flock total for {farm_name} is now {entry['new_total']}."
-
-    # 2. Additions / Purchases (e.g. 'I bought 10 chickens', 'added 5 goats')
-    add_match = re.search(r'(?:bought|added|purchased|received|bring|brought)\s+(\d+)\s+([a-zA-Z]+)', q)
-    if add_match:
-        num = int(add_match.group(1))
-        species_str = add_match.group(2)
-        entry = record_flock_event(farm_id=farm_id, species=species_str, count_change=num, event_type='purchase', notes=query)
-        if language == 'hausa':
-            return f"An rubuta: An kara {species_str} {num} (sayayya) a bayanan gonarku ({farm_name}). Yawan su a yanzu: {entry['new_total']}."
-        elif language == 'pidgin':
-            return f"Recorded: You add {num} {species_str} for your farm ({farm_name}). Your new total na {entry['new_total']}."
-        return f"Recorded: Added {num} {entry['species']} (purchase). Your current flock total for {farm_name} is now {entry['new_total']}."
-
-    # 3. Explicit Count Setup / Initialization (e.g. 'I have 5 chickens', 'start with 20 hens', 'set chicken count to 50')
-    init_match = re.search(r'(?:i have|i get|set count to|start with|record)\s+(\d+)\s+([a-zA-Z]+)', q)
-    if init_match:
-        num = int(init_match.group(1))
-        species_str = init_match.group(2)
-        entry = record_flock_event(farm_id=farm_id, species=species_str, exact_total=num, event_type='count_update', notes=query)
-        if language == 'hausa':
-            return f"An rubuta: An saita yawan {species_str} zuwa {num} a gonarku ({farm_name})."
-        elif language == 'pidgin':
-            return f"Recorded: Your {species_str} count don set to {num} for {farm_name}."
-        return f"Recorded: Your {entry['species']} count for {farm_name} has been set to {num} in the flock ledger."
-
-    # 4. Historical Date Query (e.g. 'how many chickens did i have on august 12', 'count yesterday')
-    date_keywords = ['yesterday', 'last week', 'last month', 'august', 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'september', 'october', 'november', 'december']
-    if any(k in q for k in date_keywords) and ('how many' in q or 'count' in q or 'total' in q or 'did i have' in q):
-        target_date = parse_date_reference(q)
-        hist = get_flock_count_on_date(farm_id=farm_id, target_date=target_date)
-        species_summary = ', '.join([f"{k}: {v}" for k, v in hist['species_counts'].items()]) if hist['species_counts'] else '0 animals recorded'
-        if language == 'hausa':
-            return f"Bisa ga bayanan gonarku ({farm_name}) a ranar {target_date}: kuna da dabbobi {hist['total_flock_size']} ({species_summary})."
-        elif language == 'pidgin':
-            return f"According to your records ({farm_name}) on {target_date}: you get {hist['total_flock_size']} animals ({species_summary})."
-        return f"According to your flock ledger for {farm_name} as of {target_date}: you had {hist['total_flock_size']} total animals ({species_summary})."
-
-    # 5. Current Total Count Query (e.g. 'how many animals do i have', 'how many chickens do i have')
-    count_patterns = [r'\bhow many\b', r'\bcount\b', r'\btotal animals\b', r'\bnumber of\b', r'\blist animals\b', r'\bdabbobi nawa\b', r'\bkaji nawa\b']
-    if any(re.search(pat, q) for pat in count_patterns):
-        totals = get_current_flock_totals(farm_id=farm_id)
-        if not totals:
-            desc = farm.get('description', '') if farm else ''
-            notes_part = f' (Farm profile notes: "{desc}")' if desc else ''
-            if language == 'hausa':
-                return f"Bisa ga bayanan gonarku ({farm_name}), a halin yanzu kuna da dabbobi 0 da aka rubuta a rumbun bayanan.{notes_part}"
-            elif language == 'pidgin':
-                return f"According to your farm records ({farm_name}), you get 0 animals recorded for your database right now.{notes_part}"
-            return f"According to your flock ledger for {farm_name}, you currently have 0 registered animals recorded.{notes_part}"
-
-        summary = ', '.join([f"{k}: {v}" for k, v in totals.items()])
-        total_sum = sum(totals.values())
-        if language == 'hausa':
-            return f"Bisa ga bayanan gonarku ({farm_name}), a halin yanzu kuna da jimillar dabbobi {total_sum}: {summary}."
-        elif language == 'pidgin':
-            return f"According to your farm records ({farm_name}), you get {total_sum} animals right now: {summary}."
-        return f"According to your flock ledger for {farm_name}, you currently have {total_sum} animals: {summary}."
-
-    return None
-
-
 def format_database_tool_context(tool_results: List[Dict[str, Any]]) -> str:
     lines = []
     for tr in tool_results:
@@ -286,18 +182,24 @@ def format_database_tool_context(tool_results: List[Dict[str, Any]]) -> str:
 
         if tool == "list_animals" and isinstance(res, dict):
             data = res.get("data", [])
+            total = res.get("total", sum(a.get("count", 0) for a in data) if isinstance(data, list) else 0)
             lines.append("FARM FLOCK INVENTORY QUERY RESULT:")
-            if data:
-                flock_strs = [f"{a.get('species', 'Unknown').capitalize()}: {a.get('count', 0)} total" for a in data]
-                lines.append(f"- Current Inventory: {'; '.join(flock_strs)}")
+            if isinstance(data, dict):
+                # Historical date query
+                lines.append(f"- Historical Count on {data.get('as_of_date')}: {data.get('count', data.get('total_flock_size', 0))} {data.get('species', 'animals')}")
+            elif data:
+                flock_strs = [f"{a.get('species', 'Unknown').capitalize()}: {a.get('count', 0)}" for a in data]
+                lines.append(f"- Current Flock Counts: {', '.join(flock_strs)} (Total: {total})")
             else:
-                lines.append("- Current Inventory: None (0 animals registered in database)")
+                lines.append("- Current Inventory: None (0 animals recorded in database)")
 
         elif tool == "register_flock" and isinstance(res, dict):
             lines.append("FLOCK REGISTRATION RESULT:")
             if res.get("status") == "success":
-                lines.append(f"- Successfully recorded a flock of {res.get('count')} {res.get('species')} into the database.")
+                entry = res.get("entry", {})
+                lines.append(f"- Successfully recorded {entry.get('event_type')} of {entry.get('count_change', 0):+d} {entry.get('species')}. New total flock balance is {entry.get('new_total', 0)}.")
             else:
+                lines.append(f"- Failed to record flock: {res.get('message', 'Unknown error')}")
                 lines.append(f"- Failed to record flock: {res.get('message', 'Unknown error')}")
 
         elif tool == "list_expenditures" and isinstance(res, dict):
@@ -432,6 +334,81 @@ def clean_english_prose(text: str) -> str:
     return t.strip()
 
 
+def format_tool_direct_response(tool_name: str, result: dict, farm_id: str, language: str = "english") -> Optional[str]:
+    """Generates an immediate, 100% accurate grounded response for database operations."""
+    farm = get_farm_by_id(farm_id)
+    farm_name = farm["name"] if farm else "your farm"
+
+    if tool_name == "list_animals":
+        if result.get("historical"):
+            d = result.get("data", {})
+            date_str = result.get("date", "specified date")
+            cnt = d.get("count", d.get("total_flock_size", 0))
+            sp = d.get("species", "animals")
+            if language == "hausa":
+                return f"Bisa ga bayanan gonarku ({farm_name}) a ranar {date_str}: kuna da {sp} {cnt}."
+            elif language == "pidgin":
+                return f"According to your records ({farm_name}) on {date_str}: you get {cnt} {sp}."
+            return f"According to your flock ledger for {farm_name} as of {date_str}: you had {cnt} {sp}."
+        else:
+            data = result.get("data", [])
+            total = result.get("total", 0)
+            if not data or total == 0:
+                desc = farm.get("description", "") if farm else ""
+                notes = f' (Farm profile notes: "{desc}")' if desc else ""
+                if language == "hausa":
+                    return f"Bisa ga bayanan gonarku ({farm_name}), a halin yanzu kuna da dabbobi 0 da aka rubuta a rumbun bayanan.{notes}"
+                elif language == "pidgin":
+                    return f"According to your farm records ({farm_name}), you get 0 animals recorded right now.{notes}"
+                return f"According to your flock ledger for {farm_name}, you currently have 0 registered animals recorded.{notes}"
+            summary = ", ".join([f"{a.get('species', 'Unknown').capitalize()}: {a.get('count', 0)}" for a in data])
+            if language == "hausa":
+                return f"Bisa ga bayanan gonarku ({farm_name}), a halin yanzu kuna da jimillar dabbobi {total}: {summary}."
+            elif language == "pidgin":
+                return f"According to your farm records ({farm_name}), you get {total} animals right now: {summary}."
+            return f"According to your flock ledger for {farm_name}, you currently have {total} animals: {summary}."
+
+    elif tool_name == "register_flock":
+        entry = result.get("entry", {})
+        sp = entry.get("species", "animals")
+        evt = entry.get("event_type", "update")
+        chg = entry.get("count_change", 0)
+        tot = entry.get("new_total", 0)
+        if language == "hausa":
+            return f"An rubuta: An sabunta {sp} ({evt}) a bayanan gonarku ({farm_name}). Yawan su a yanzu: {tot}."
+        elif language == "pidgin":
+            return f"Recorded: Updated {sp} ({evt}) for your farm ({farm_name}). Your new total na {tot}."
+        return f"Recorded: Logged {evt} ({chg:+d} {sp}). Your current flock total for {farm_name} is now {tot}."
+
+    elif tool_name == "list_expenditures":
+        cnt = result.get("count", 0)
+        data = result.get("data", [])
+        total_amt = sum(e.get("amount", 0) for e in data)
+        if language == "hausa":
+            return f"Bisa ga bayanan kudaden gonarku ({farm_name}), kuna da rubuce-rubucen kudaden da aka kashe guda {cnt} da suka kai NGN {total_amt:,.2f}."
+        elif language == "pidgin":
+            return f"According to your farm expenses ({farm_name}), you get {cnt} records wey reach NGN {total_amt:,.2f}."
+        return f"According to your financial records for {farm_name}, you have {cnt} recorded expenditures totaling NGN {total_amt:,.2f}."
+
+    elif tool_name == "write_expenditure":
+        data = result.get("data", {})
+        amt = data.get("amount", 0)
+        cat = data.get("category", "operations")
+        desc = data.get("description", "")
+        return f"Recorded: Expenditure of NGN {amt:,.2f} logged under '{cat}' for {farm_name} ({desc})."
+
+    elif tool_name == "list_health_logs":
+        cnt = result.get("count", 0)
+        data = result.get("data", [])
+        return f"Found {cnt} health log records in your database for {farm_name}."
+
+    elif tool_name == "write_health_log":
+        data = result.get("data", {})
+        return f"Recorded: Health event '{data.get('event_type')}' logged successfully for animal {data.get('animal_id')}."
+
+    return None
+
+
 def chat_completion(
     messages: List[Dict[str, str]],
     farm_id: str = "default_farm",
@@ -466,12 +443,6 @@ def chat_completion(
         print(f"[llm_engine] Fast greeting handler answered in {time.time() - turn_start:.2f}s")
         return fast_ans
 
-    # Step 2b: Grounded Flock Ledger Transaction & Count Handler (< 0.001s)
-    ledger_ans = handle_flock_ledger_query(current_query_en, farm_id=farm_id, language=norm_lang)
-    if ledger_ans:
-        print(f"[llm_engine] Flock ledger handler answered in {time.time() - turn_start:.2f}s")
-        return ledger_ans
-
     llm = get_llm()
     if llm is None:
         return "[Fallback] Model not loaded."
@@ -479,18 +450,16 @@ def chat_completion(
     farm_summary = get_system_context_summary(farm_id)
 
     # Step 3: PASS 1 - JSON ROUTING (No logit bias applied here so it CAN output JSON)
-    # --- FIX B: expanded few-shots to cover generic / hybrid inventory phrasing,
-    # since the 3B router generalizes poorly from too few examples. ---
     routing_system = {
         "role": "system",
         "content": (
             "You are the tool routing engine for FarmHand AI.\n"
             "Output ONLY a valid JSON array with the single best tool call.\n\n"
             "TOOLS:\n"
-            "- list_animals(species: str): Query farm inventory, count animals, or list livestock/poultry.\n"
+            "- list_animals(species: str, date_str: str): Query farm flock inventory, count animals/birds, or query historical counts on date.\n"
             "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
             "- list_health_logs(species: str): View medical logs and health check records for a flock/species.\n"
-            "- register_flock(species: str, count: int, notes: str): Record a bulk group or flock of animals.\n"
+            "- register_flock(species: str, count: int, event_type: str, notes: str): Record or update flock count (e.g. initial count, purchase, mortality, sale).\n"
             "- write_expenditure(category: str, amount: float, description: str): Record a new financial expense.\n"
             "- write_health_log(species: str, event_type: str, notes: str): Record a health check event.\n"
             "- query_knowledge_base(search_query: str): Search manuals for diseases, symptoms, treatments, feeding, or advice.\n\n"
@@ -498,13 +467,16 @@ def chat_completion(
             "use an empty arguments object {} rather than inventing a species value.\n\n"
             "EXAMPLES:\n"
             "Farmer: 'how many chickens do i have' -> [{\"function_name\": \"list_animals\", \"arguments\": {\"species\": \"poultry\"}}]\n"
+            "Farmer: 'in my farm right now, how much chicken do i have' -> [{\"function_name\": \"list_animals\", \"arguments\": {\"species\": \"poultry\"}}]\n"
             "Farmer: 'list all my animals' -> [{\"function_name\": \"list_animals\", \"arguments\": {}}]\n"
             "Farmer: 'how many animals do i have' -> [{\"function_name\": \"list_animals\", \"arguments\": {}}]\n"
-            "Farmer: 'what do i have on the farm' -> [{\"function_name\": \"list_animals\", \"arguments\": {}}]\n"
-            "Farmer: 'how many goats do i have' -> [{\"function_name\": \"list_animals\", \"arguments\": {\"species\": \"goat\"}}]\n"
+            "Farmer: 'how many chickens did i have on 2026-08-10' -> [{\"function_name\": \"list_animals\", \"arguments\": {\"species\": \"poultry\", \"date_str\": \"2026-08-10\"}}]\n"
+            "Farmer: 'I have 5 chickens' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": 5, \"event_type\": \"initial_count\", \"notes\": \"\"}}]\n"
+            "Farmer: 'I bought 10 chickens' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": 10, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
+            "Farmer: '2 chickens died' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -2, \"event_type\": \"mortality\", \"notes\": \"\"}}]\n"
             "Farmer: 'what causes coughing in goats' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat coughing causes treatment\"}}]\n"
-            "Farmer: 'how much have i spent this month' -> [{\"function_name\": \"list_expenditures\", \"arguments\": {}}]\n"
-            "Farmer: 'add 20 chickens' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": 20, \"notes\": \"\"}}]"
+            "Farmer: 'my chickens have blisters on their feet' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"poultry blisters feet beak causes treatment\"}}]\n"
+            "Farmer: 'how much have i spent this month' -> [{\"function_name\": \"list_expenditures\", \"arguments\": {}}]"
         )
     }
 
@@ -555,7 +527,20 @@ def chat_completion(
         else:
             print("[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise.")
 
-    # Step 5: PASS 3 - STATELESS SYNTHESIS
+    # Step 5: SYNTHESIS / RESULT DISPATCH
+    if is_tool_call:
+        # Check if a database tool was executed
+        for call in tool_calls:
+            fn_name = call["function_name"]
+            tool_match = next((tr["result"] for tr in tool_results if tr["tool"] == fn_name), None)
+            if tool_match and fn_name in ("list_animals", "register_flock", "list_expenditures", "write_expenditure", "list_health_logs", "write_health_log"):
+                db_direct_ans = format_tool_direct_response(fn_name, tool_match, farm_id=farm_id, language=norm_lang)
+                if db_direct_ans:
+                    print(f"[llm_engine] Database tool '{fn_name}' direct response generated.")
+                    total_time = time.time() - turn_start
+                    print(f"[llm_engine] TOTAL TURN TIME: {total_time:.2f}s\n")
+                    return db_direct_ans
+
     if rag_context:
         print(f"[llm_engine] Running Pass 3 (RAG Synthesis)...")
         raw_output = generate_stateless_answer(llm, rag_context, current_query_en, norm_lang, farm_summary)
