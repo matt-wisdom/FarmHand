@@ -143,7 +143,7 @@ def clean_english_prose(text: str) -> str:
 
 
 def is_conversational_greeting(query: str) -> bool:
-    """Robust detection for conversational greetings, chit-chat, and polite expressions."""
+    """Robust detection strictly for conversational greetings, chit-chat, and polite expressions."""
     q = query.lower().strip()
     words = set(re.findall(r'\b\w+\b', q))
     if not words:
@@ -161,7 +161,7 @@ def is_conversational_greeting(query: str) -> bool:
         'fever', 'limp', 'limping', 'cuta', 'ciwo', 'tari', 'mura', 'zazzabi', 'magani',
         'blister', 'blisters', 'scab', 'scabs', 'wound', 'wounds', 'pox', 'fungal', 'fungus',
         'feed', 'housing', 'pen', 'coop', 'vaccine', 'vaccination', 'egg', 'eggs', 'weight',
-        'cost', 'expense', 'spent', 'buy', 'bought', 'naira', 'kudi', 'count', 'number'
+        'cost', 'expense', 'spent', 'buy', 'bought', 'naira', 'kudi', 'count', 'number', 'many'
     }
 
     has_greeting = bool(words.intersection(greeting_words)) or 'how far' in q or 'how are you' in q or 'how is work' in q or 'ina kwana' in q
@@ -170,70 +170,25 @@ def is_conversational_greeting(query: str) -> bool:
     return has_greeting and not has_action
 
 
-def handle_fast_intent(query: str, farm_id: str, language: str) -> Optional[str]:
-    """Provides fast, 100% accurate grounded responses for greetings and farm inventory counts."""
+def handle_fast_intent(query: str, language: str) -> Optional[str]:
+    """Strictly handles conversational greetings in 0.00s."""
     q = query.lower().strip()
 
-    # 1. Robust Conversational Greetings Handler (0.00s, 100% natural)
-    if is_conversational_greeting(q):
-        if "gode" in q or "thank" in q:
-            if language == "hausa":
-                return "Barka da aiki! Idan kuna da wata tambaya game da dabbobinku ko ayyukan gonarku, ina nan a shirye in taimaka muku."
-            elif language == "pidgin":
-                return "You are welcome! If you get any other question about your farm or animals, just ask me anytime."
-            return "You are welcome! If you have any other questions regarding your livestock, poultry, or farm operations, feel free to ask anytime."
+    if not is_conversational_greeting(q):
+        return None
 
+    if "gode" in q or "thank" in q:
         if language == "hausa":
-            return "Sannu! Barka da asuba. Ni ne FarmHand AI, mataimakin gonarka. Yaya zan iya taimaka maka da dabbobinka ko ayyukan gonarka a yau?"
+            return "Barka da aiki! Idan kuna da wata tambaya game da dabbobinku ko ayyukan gonarku, ina nan a shirye in taimaka muku."
         elif language == "pidgin":
-            return "Hello! I be FarmHand AI. How I fit help you with your animals or farm today?"
-        return "Hello! I am FarmHand AI, your digital agricultural assistant. How can I assist you with your livestock, poultry, or farm operations today?"
+            return "You are welcome! If you get any other question about your farm or animals, just ask me anytime."
+        return "You are welcome! If you have any other questions regarding your livestock, poultry, or farm operations, feel free to ask anytime."
 
-    # 2. Authoritative Database Inventory Count Queries
-    count_patterns = [
-        r'\bhow many\b', r'\bnumber of animals\b', r'\bcount\b', r'\btotal animals\b',
-        r'\blist animals\b', r'\blist all animals\b', r'\bshow animals\b', r'\banimal count\b',
-        r'\banimals in the field\b', r'\banimals registered\b', r'\bdabbobi nawa\b', r'\bkaji nawa\b'
-    ]
-    if any(re.search(pat, q) for pat in count_patterns):
-        import sqlite3
-        from database import DB_PATH
-        with sqlite3.connect(str(DB_PATH)) as conn:
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            c.execute("SELECT id, name, species, breed FROM animals WHERE farm_id = ?", (farm_id,))
-            animals = c.fetchall()
-            farm = get_farm_by_id(farm_id)
-
-        farm_name = farm["name"] if farm else "your farm"
-        desc = farm["description"] if farm and farm.get("description") else ""
-        count = len(animals)
-
-        if language == "hausa":
-            if count == 0:
-                notes_part = f" Bayanin gonarku ya nuna: \"{desc}\", amma ba a yi wa kowace dabba rajista a rumbun bayanan ba tukuna." if desc else ""
-                return f"Bisa ga bayanan gonarku ({farm_name}), a halin yanzu kuna da dabbobi 0 da aka yi wa rajista a rumbun bayanan.{notes_part}"
-            else:
-                animal_list = ", ".join([f"{a['id']} ({a['species']} - {a['name']})" for a in animals[:5]])
-                return f"Bisa ga bayanan gonarku ({farm_name}), kuna da dabbobi {count} da aka yi wa rajista: {animal_list}."
-
-        elif language == "pidgin":
-            if count == 0:
-                notes_part = f" Your farm profile write say: \"{desc}\", but you never register them inside the database." if desc else ""
-                return f"According to your farm records ({farm_name}), you get 0 animals recorded for your database right now.{notes_part}"
-            else:
-                animal_list = ", ".join([f"{a['id']} ({a['species']} - {a['name']})" for a in animals[:5]])
-                return f"According to your farm records ({farm_name}), you get {count} animals recorded: {animal_list}."
-
-        else:
-            if count == 0:
-                notes_part = f" Your farm profile notes mention: \"{desc}\", but these have not been individually logged into the database yet." if desc else ""
-                return f"According to your farm database records for {farm_name}, you currently have 0 registered animals.{notes_part}"
-            else:
-                animal_list = ", ".join([f"{a['id']} ({a['species']} - {a['name']})" for a in animals[:5]])
-                return f"According to your farm database records for {farm_name}, you currently have {count} registered animals: {animal_list}."
-
-    return None
+    if language == "hausa":
+        return "Sannu! Barka da asuba. Ni ne FarmHand AI, mataimakin gonarka. Yaya zan iya taimaka maka da dabbobinka ko ayyukan gonarka a yau?"
+    elif language == "pidgin":
+        return "Hello! I be FarmHand AI. How I fit help you with your animals or farm today?"
+    return "Hello! I am FarmHand AI, your digital agricultural assistant. How can I assist you with your livestock, poultry, or farm operations today?"
 
 
 def chat_completion(
@@ -265,15 +220,16 @@ def chat_completion(
         effective_messages = list(messages)
         current_query_en = last_user_query
 
-    # Step 2: Instant Grounded Fast Intent Handler (< 0.001s for greetings and inventory)
-    fast_ans = handle_fast_intent(current_query_en, farm_id=farm_id, language=norm_lang)
+    # Step 2: Instant Grounded Fast Intent Handler strictly for greetings (< 0.001s)
+    fast_ans = handle_fast_intent(current_query_en, language=norm_lang)
     if fast_ans:
         dt = time.time() - turn_start
-        print(f"[llm_engine] Fast intent handler answered in {dt:.2f}s:\n{fast_ans}")
+        print(f"[llm_engine] Fast greeting handler answered in {dt:.2f}s:\n{fast_ans}")
         print(f"[llm_engine] --- Chat Turn End ---\n")
         return fast_ans
 
-    # Step 3: Fetch active farm profile
+    # Step 3: Fetch active farm database profile & context
+    farm_summary = get_system_context_summary(farm_id)
     farm = get_farm_by_id(farm_id)
     farm_species = farm["farm_type"] if farm and farm.get("farm_type") else "General"
     species_scope = farm_species if farm_species.lower() != "general" else ""
@@ -300,7 +256,6 @@ def chat_completion(
         return "[Fallback] Model not loaded."
 
     knowledge_section = f"\nVETERINARY REFERENCE CONTEXT:\n{rag_context}\n" if rag_context.strip() else ""
-    species_rule = f"Active Farm: {farm.get('name', 'Farm')} ({farm_species})." if species_scope else ""
 
     if norm_lang == "pidgin":
         lang_instruction = "Answer the farmer directly in helpful, warm Nigerian Pidgin with practical clinical causes, first aid, and prevention steps."
@@ -309,8 +264,9 @@ def chat_completion(
 
     system_prompt = (
         "You are FarmHand AI, an expert agricultural and veterinary advisor for farmers.\n"
-        f"{species_rule}\n"
+        f"{farm_summary}\n"
         f"{lang_instruction}\n"
+        "When the farmer asks about their farm, animals, or notes, cite the ACTIVE FARM PROFILE above.\n"
         "Do NOT change the subject. Do NOT output random numbers, JSON brackets, or code."
         f"{knowledge_section}"
     )
