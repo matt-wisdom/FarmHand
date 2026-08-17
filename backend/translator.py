@@ -91,6 +91,25 @@ def translate_ha_to_en(text: str) -> str:
     greeting_terms = {"sannu", "barka", "kwana", "ina", "kake", "kuke", "yaya", "aiki", "godiya", "nagode", "gode"}
     agri_action_terms = {"kaji", "kaza", "awaki", "akuya", "shanu", "saniya", "tumaki", "rago", "dabbobi", "tsuntsaye", "cuta", "ciwo", "tari", "mura", "zazzabi", "magani", "nawa", "kudi", "kudin", "kashe", "rigakafi", "allura"}
     
+    # Common conversational agricultural queries & count queries in Hausa
+    if "nawa" in lower:
+        if any(w in lower for w in ["dabbobi", "dabba", "gonata", "gona", "ke nan"]):
+            res = "how many animals do i have?"
+            print(f"\n[translator:ha->en] Quick query translation in 0.00s: '{text}' -> '{res}'\n")
+            return res
+        if any(w in lower for w in ["kaji", "kaza", "tsuntsaye"]):
+            res = "how many chickens do i have?"
+            print(f"\n[translator:ha->en] Quick query translation in 0.00s: '{text}' -> '{res}'\n")
+            return res
+        if any(w in lower for w in ["awaki", "akuya"]):
+            res = "how many goats do i have?"
+            print(f"\n[translator:ha->en] Quick query translation in 0.00s: '{text}' -> '{res}'\n")
+            return res
+        if any(w in lower for w in ["shanu", "saniya"]):
+            res = "how many cattle do i have?"
+            print(f"\n[translator:ha->en] Quick query translation in 0.00s: '{text}' -> '{res}'\n")
+            return res
+
     if clean_words.intersection(greeting_terms) and not clean_words.intersection(agri_action_terms):
         if "aiki" in clean_words:
             res = "hello, how is work?"

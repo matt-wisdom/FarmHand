@@ -20,11 +20,15 @@ from database import (
     get_all_expenditures,
     get_all_health_logs,
     get_chat_threads,
+    get_current_flock_totals,
     get_farm_by_id,
     get_farms,
+    get_flock_count_on_date,
+    get_flock_ledger_history,
     get_thread_by_id,
     get_thread_messages,
     init_db,
+    record_flock_event,
     update_farm,
 )
 from llm_engine import chat_completion, get_llm
@@ -152,6 +156,14 @@ class ChatResponse(BaseModel):
     response: str = Field(..., description="Assistant final response string")
 
 
+class FlockEventRequest(BaseModel):
+    species: str = Field("Poultry", description="Species name")
+    count_change: Optional[int] = Field(0, description="Change in count (positive for additions, negative for losses)")
+    exact_total: Optional[int] = Field(None, description="Direct new total count (for initial setup or reset)")
+    event_type: str = Field("count_update", description="Event type: initial_count, purchase, mortality, sale, count_update")
+    notes: Optional[str] = Field("", description="Optional event description or notes")
+
+
 # -------------------------------------------------------------------
 # Multi-Farm Management Endpoints
 # -------------------------------------------------------------------
@@ -197,6 +209,53 @@ def delete_farm_endpoint(farm_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Farm profile not found")
     return {"status": "success", "message": f"Farm '{farm_id}' deleted."}
+
+
+# -------------------------------------------------------------------
+# Flock & Herd Count Ledger Endpoints
+# -------------------------------------------------------------------
+
+@app.get("/api/farms/{farm_id}/flock-ledger", tags=["Flock Ledger"])
+def get_flock_ledger_endpoint(farm_id: str):
+    """GET /api/farms/{farm_id}/flock-ledger: Returns current flock totals and recent ledger history."""
+    totals = get_current_flock_totals(farm_id=farm_id)
+    history = get_flock_ledger_history(farm_id=farm_id, limit=50)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "current_totals": totals,
+        "total_flock_size": sum(totals.values()),
+        "history": history
+    }
+
+
+@app.post("/api/farms/{farm_id}/flock-ledger", tags=["Flock Ledger"])
+def record_flock_event_endpoint(farm_id: str, payload: FlockEventRequest):
+    """POST /api/farms/{farm_id}/flock-ledger: Records a new count event (purchase, mortality, update)."""
+    entry = record_flock_event(
+        farm_id=farm_id,
+        species=payload.species,
+        count_change=payload.count_change or 0,
+        exact_total=payload.exact_total,
+        event_type=payload.event_type,
+        notes=payload.notes or ""
+    )
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "entry": entry
+    }
+
+
+@app.get("/api/farms/{farm_id}/flock-ledger/count", tags=["Flock Ledger"])
+def get_flock_count_endpoint(farm_id: str, species: Optional[str] = None, target_date: Optional[str] = None):
+    """GET /api/farms/{farm_id}/flock-ledger/count: Queries count on a specific historical date (YYYY-MM-DD)."""
+    result = get_flock_count_on_date(farm_id=farm_id, species=species, target_date=target_date)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "data": result
+    }
 
 
 # -------------------------------------------------------------------

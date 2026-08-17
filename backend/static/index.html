@@ -174,11 +174,11 @@
               <span>Expenditures</span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'health' }" @click="switchTab('health')" title="Health & Animals">
+            <div class="nav-link" :class="{ active: currentTab === 'health' }" @click="switchTab('health')" title="Flock Ledger">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
               </svg>
-              <span>Health & Animals</span>
+              <span>Flock Ledger</span>
             </div>
 
             <div class="nav-link" :class="{ active: currentTab === 'telemetry' }" @click="switchTab('telemetry')" title="IoT Sensors">
@@ -404,39 +404,54 @@
           </div>
         </section>
 
-        <!-- VIEW TAB 4: HEALTH & ANIMALS TAB -->
+        <!-- VIEW TAB 4: FLOCK & HERD LEDGER TAB -->
         <section v-if="currentTab === 'health'" class="view-container">
           <div class="section-header-flex">
-            <h2 class="section-heading">Livestock & Health Records</h2>
+            <h2 class="section-heading">Flock & Herd Ledger</h2>
             <div style="display: flex; gap: 8px;">
-              <button class="btn-secondary-green" @click="showAddAnimalModal = true">+ Register Animal</button>
-              <button class="btn-green" @click="showAddHealthLogModal = true">+ Log Health Check</button>
+              <button class="btn-green" @click="showAddFlockModal = true">+ Log Flock Event</button>
+            </div>
+          </div>
+
+          <!-- Live Species Count Metric Cards -->
+          <div class="stats-grid" style="margin-bottom: 24px;">
+            <div class="stat-card" v-for="(cnt, sp) in flockTotals" :key="sp">
+              <div class="stat-lbl">{{ sp }} Flock</div>
+              <div class="stat-val">{{ cnt }} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">heads</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-lbl">Total Animals</div>
+              <div class="stat-val">{{ totalFlockSize }} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">total</span></div>
             </div>
           </div>
           
           <div style="margin-bottom: 24px;">
-            <h3>Registered Animals</h3>
+            <h3>Flock Audit & Count History</h3>
             <div class="table-container">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Tag ID</th>
-                    <th>Name</th>
+                    <th>Date & Time</th>
                     <th>Species</th>
-                    <th>Breed</th>
-                    <th>Status</th>
+                    <th>Event Type</th>
+                    <th>Count Change</th>
+                    <th>New Balance</th>
+                    <th>Notes / Reason</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="a in animals" :key="a.id">
-                    <td><code>{{ a.id }}</code></td>
-                    <td><strong>{{ a.name }}</strong></td>
-                    <td>{{ a.species }}</td>
-                    <td>{{ a.breed || '—' }}</td>
-                    <td><span class="badge badge-green">{{ a.status }}</span></td>
+                  <tr v-for="entry in flockHistory" :key="entry.id">
+                    <td><code>{{ entry.created_at }}</code></td>
+                    <td><strong>{{ entry.species }}</strong></td>
+                    <td><span class="badge" :class="entry.count_change >= 0 ? 'badge-green' : 'badge-yellow'">{{ entry.event_type }}</span></td>
+                    <td :style="{ color: entry.count_change >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 'bold' }">
+                      {{ entry.count_change >= 0 ? '+' + entry.count_change : entry.count_change }}
+                    </td>
+                    <td><strong>{{ entry.new_total }}</strong></td>
+                    <td>{{ entry.notes || '—' }}</td>
                   </tr>
-                  <tr v-if="animals.length === 0">
-                    <td colspan="5" style="text-align: center; color: var(--text-muted);">No animals registered.</td>
+                  <tr v-if="flockHistory.length === 0">
+                    <td colspan="6" style="text-align: center; color: var(--text-muted);">No flock records in ledger yet. Use '+ Log Flock Event' or tell FarmHand AI in chat.</td>
                   </tr>
                 </tbody>
               </table>
@@ -700,6 +715,53 @@
       </div>
     </div>
 
+    <!-- MODAL: LOG FLOCK EVENT -->
+    <div v-if="showAddFlockModal" class="modal-overlay" @click.self="showAddFlockModal = false">
+      <div class="modal-card">
+        <div class="modal-header-bar">
+          <h3>Log Flock / Herd Event</h3>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddFlockModal = false">✕</button>
+        </div>
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Species</label>
+            <select class="form-control" v-model="newFlockEvent.species">
+              <option value="Poultry">Poultry / Chickens</option>
+              <option value="Goat">Goats</option>
+              <option value="Sheep">Sheep</option>
+              <option value="Cattle">Cattle / Cows</option>
+              <option value="Pig">Pigs</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Event Type</label>
+            <select class="form-control" v-model="newFlockEvent.event_type">
+              <option value="purchase">Purchase / Addition (+)</option>
+              <option value="mortality">Mortality / Loss (-)</option>
+              <option value="sale">Sale / Transfer (-)</option>
+              <option value="count_update">Set Exact Total Count</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="newFlockEvent.event_type !== 'count_update'">
+            <label>Count Change (Number of Animals)</label>
+            <input type="number" class="form-control" placeholder="e.g. 10" v-model.number="newFlockEvent.count_change">
+          </div>
+          <div class="form-group" v-if="newFlockEvent.event_type === 'count_update'">
+            <label>New Exact Total Count</label>
+            <input type="number" class="form-control" placeholder="e.g. 50" v-model.number="newFlockEvent.exact_total">
+          </div>
+          <div class="form-group">
+            <label>Notes / Reason</label>
+            <textarea class="form-control" rows="2" placeholder="e.g. Bought from market, died of cold..." v-model="newFlockEvent.notes"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showAddFlockModal = false">Cancel</button>
+          <button class="btn-green" @click="submitFlockEvent">Save to Ledger</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -810,6 +872,13 @@
         const telemetry = ref([]);
         const animals = ref([]);
 
+        // Flock Ledger State
+        const flockTotals = ref({});
+        const flockHistory = ref([]);
+        const totalFlockSize = ref(0);
+        const showAddFlockModal = ref(false);
+        const newFlockEvent = ref({ species: 'Poultry', count_change: 0, exact_total: null, event_type: 'purchase', notes: '' });
+
         // Modals & Form States
         const showAddExpenditureModal = ref(false);
         const newExp = ref({ category: '', amount: 0, description: '' });
@@ -885,6 +954,41 @@
           showFarmDropdown.value = false;
           showToast(`Switched to ${activeFarm.value?.name || 'Farm'}`);
           await fetchThreads();
+          await fetchFlockLedger();
+        };
+
+        const fetchFlockLedger = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/flock-ledger`);
+            if (res.ok) {
+              const data = await res.json();
+              flockTotals.value = data.current_totals || {};
+              totalFlockSize.value = data.total_flock_size || 0;
+              flockHistory.value = data.history || [];
+            }
+          } catch (e) {
+            console.error('Error fetching flock ledger:', e);
+          }
+        };
+
+        const submitFlockEvent = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/flock-ledger`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newFlockEvent.value)
+            });
+            if (res.ok) {
+              showToast('Flock Ledger Event Recorded');
+              await fetchFlockLedger();
+              showAddFlockModal.value = false;
+              newFlockEvent.value = { species: 'Poultry', count_change: 0, exact_total: null, event_type: 'purchase', notes: '' };
+            }
+          } catch (e) {
+            console.error('Error submitting flock event:', e);
+          }
         };
 
         const openCreateFarmModal = () => {
@@ -1133,6 +1237,9 @@
           isLoading.value = true;
           currentTab.value = tabName;
           closeMobileSidebar();
+          if (tabName === 'health') {
+            fetchFlockLedger();
+          }
           setTimeout(() => {
             isLoading.value = false;
           }, 400);
@@ -1162,6 +1269,7 @@
             openCreateFarmModal();
           }
           await fetchThreads();
+          await fetchFlockLedger();
           await fetchHealth();
           isLoading.value = false;
         });
@@ -1199,6 +1307,13 @@
           healthLogs,
           telemetry,
           animals,
+          flockTotals,
+          flockHistory,
+          totalFlockSize,
+          showAddFlockModal,
+          newFlockEvent,
+          fetchFlockLedger,
+          submitFlockEvent,
           editingMsgId,
           editBuffer,
           showAddExpenditureModal,

@@ -129,8 +129,23 @@ def init_db(db_path: Path = DB_PATH):
             )
         """)
 
+        # Flock Ledger Table (Append-only time-series animal count ledger)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS flock_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farm_id TEXT NOT NULL,
+                species TEXT NOT NULL,
+                count_change INTEGER NOT NULL,
+                new_total INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(farm_id) REFERENCES farms(id) ON DELETE CASCADE
+            )
+        """)
+
         # Auto-migrate missing columns for existing databases
-        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals"]:
+        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals", "flock_ledger"]:
             try:
                 cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN farm_id TEXT DEFAULT 'default_farm'")
             except sqlite3.OperationalError:
@@ -298,10 +313,173 @@ def add_animal_record(animal_id: str, name: str, species: str, breed: str = "", 
         return animal_id
 
 
+# -------------------------------------------------------------------
+# Flock & Herd Count Ledger Functions
+# -------------------------------------------------------------------
+
+def normalize_species_name(species: str) -> str:
+    """Normalize species colloquialisms to canonical species names."""
+    s = str(species).lower().strip()
+    if s in ["chicken", "chickens", "hen", "hens", "broiler", "broilers", "layer", "layers", "poultry", "bird", "birds", "kaza", "kaji"]:
+        return "Poultry"
+    if s in ["goat", "goats", "buck", "doe", "kid", "kids", "akuya", "awaki"]:
+        return "Goat"
+    if s in ["sheep", "ram", "rams", "ewe", "ewes", "lamb", "lambs", "tinkiya", "tumaki"]:
+        return "Sheep"
+    if s in ["cow", "cows", "cattle", "bull", "bulls", "calf", "calves", "saniya", "shanu"]:
+        return "Cattle"
+    if s in ["pig", "pigs", "swine", "alhanzir"]:
+        return "Pig"
+    return s.capitalize() if s else "Poultry"
+
+
+def get_current_flock_totals(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> Dict[str, int]:
+    """Returns the latest count total for each species on the active farm."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT species, new_total
+            FROM flock_ledger
+            WHERE farm_id = ? AND id IN (
+                SELECT MAX(id) FROM flock_ledger WHERE farm_id = ? GROUP BY species
+            )
+        """, (farm_id, farm_id))
+        return {r["species"]: r["new_total"] for r in cursor.fetchall()}
+
+
+def record_flock_event(
+    farm_id: str = "default_farm",
+    species: str = "Poultry",
+    count_change: int = 0,
+    event_type: str = "initial_count",
+    notes: str = "",
+    exact_total: Optional[int] = None,
+    created_at: Optional[str] = None,
+    db_path: Path = DB_PATH
+) -> Dict[str, Any]:
+    """
+    Appends a new count event to the flock ledger and calculates the running total.
+    """
+    norm_species = normalize_species_name(species)
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        # Find current latest total
+        cursor.execute(
+            "SELECT new_total FROM flock_ledger WHERE farm_id = ? AND species = ? ORDER BY id DESC LIMIT 1",
+            (farm_id, norm_species)
+        )
+        row = cursor.fetchone()
+        previous_total = row["new_total"] if row else 0
+
+        if exact_total is not None:
+            new_total = max(0, exact_total)
+            count_change = new_total - previous_total
+        else:
+            new_total = max(0, previous_total + count_change)
+
+        if created_at:
+            cursor.execute(
+                "INSERT INTO flock_ledger (farm_id, species, count_change, new_total, event_type, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (farm_id, norm_species, count_change, new_total, event_type, notes, created_at)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO flock_ledger (farm_id, species, count_change, new_total, event_type, notes) VALUES (?, ?, ?, ?, ?, ?)",
+                (farm_id, norm_species, count_change, new_total, event_type, notes)
+            )
+        ledger_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM flock_ledger WHERE id = ?", (ledger_id,))
+        return dict(cursor.fetchone())
+
+
+def get_flock_count_on_date(
+    farm_id: str = "default_farm",
+    species: Optional[str] = None,
+    target_date: Optional[str] = None,
+    db_path: Path = DB_PATH
+) -> Dict[str, Any]:
+    """
+    Retrieves the flock count balance as of a specific date (YYYY-MM-DD).
+    """
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        if species:
+            norm_species = normalize_species_name(species)
+            if target_date:
+                cursor.execute("""
+                    SELECT species, new_total, created_at
+                    FROM flock_ledger
+                    WHERE farm_id = ? AND species = ? AND date(created_at) <= date(?)
+                    ORDER BY id DESC LIMIT 1
+                """, (farm_id, norm_species, target_date))
+            else:
+                cursor.execute("""
+                    SELECT species, new_total, created_at
+                    FROM flock_ledger
+                    WHERE farm_id = ? AND species = ?
+                    ORDER BY id DESC LIMIT 1
+                """, (farm_id, norm_species))
+            row = cursor.fetchone()
+            return {
+                "species": norm_species,
+                "count": row["new_total"] if row else 0,
+                "as_of_date": target_date or "current",
+                "last_record_date": row["created_at"] if row else None
+            }
+        else:
+            # All species
+            if target_date:
+                cursor.execute("""
+                    SELECT species, new_total, created_at
+                    FROM flock_ledger
+                    WHERE farm_id = ? AND date(created_at) <= date(?) AND id IN (
+                        SELECT MAX(id) FROM flock_ledger WHERE farm_id = ? AND date(created_at) <= date(?) GROUP BY species
+                    )
+                """, (farm_id, target_date, farm_id, target_date))
+            else:
+                cursor.execute("""
+                    SELECT species, new_total, created_at
+                    FROM flock_ledger
+                    WHERE farm_id = ? AND id IN (
+                        SELECT MAX(id) FROM flock_ledger WHERE farm_id = ? GROUP BY species
+                    )
+                """, (farm_id, farm_id))
+            rows = cursor.fetchall()
+            totals = {r["species"]: r["new_total"] for r in rows}
+            return {
+                "species_counts": totals,
+                "total_flock_size": sum(totals.values()),
+                "as_of_date": target_date or "current"
+            }
+
+
+def get_flock_ledger_history(
+    farm_id: str = "default_farm",
+    species: Optional[str] = None,
+    limit: int = 50,
+    db_path: Path = DB_PATH
+) -> List[Dict[str, Any]]:
+    """Returns the time-series audit log of flock count changes."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        if species:
+            norm_species = normalize_species_name(species)
+            cursor.execute(
+                "SELECT * FROM flock_ledger WHERE farm_id = ? AND species = ? ORDER BY id DESC LIMIT ?",
+                (farm_id, norm_species, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM flock_ledger WHERE farm_id = ? ORDER BY id DESC LIMIT ?",
+                (farm_id, limit)
+            )
+        return [dict(r) for r in cursor.fetchall()]
+
+
 def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> str:
     """
     Retrieves a live summary of the active farm profile, species constraints, custom description,
-    and database records to dynamically ground the LLM system prompt.
+    and flock ledger counts to dynamically ground the LLM system prompt.
     """
     try:
         farm = get_farm_by_id(farm_id, db_path)
@@ -312,10 +490,32 @@ def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB
         with get_db_connection(db_path) as conn:
             cursor = conn.cursor()
             
-            cursor.execute("SELECT id, name, species FROM animals WHERE farm_id = ? LIMIT 10", (farm_id,))
-            animals = [f"{r['id']} ({r['species']} - {r['name']})" for r in cursor.fetchall()]
-            animals_str = ", ".join(animals) if animals else "NONE (0 animals currently registered)"
+            # 1. Flock Ledger Totals
+            cursor.execute("""
+                SELECT species, new_total
+                FROM flock_ledger
+                WHERE farm_id = ? AND id IN (
+                    SELECT MAX(id) FROM flock_ledger WHERE farm_id = ? GROUP BY species
+                )
+            """, (farm_id, farm_id))
+            flock_rows = cursor.fetchall()
+            if flock_rows:
+                flock_items = [f"{r['species']}: {r['new_total']}" for r in flock_rows]
+                flock_str = ", ".join(flock_items)
+                total_animals = sum(r['new_total'] for r in flock_rows)
+            else:
+                flock_str = "0 animals recorded in ledger"
+                total_animals = 0
             
+            # 2. Recent Ledger Event
+            cursor.execute("SELECT species, count_change, new_total, event_type, created_at FROM flock_ledger WHERE farm_id = ? ORDER BY id DESC LIMIT 3", (farm_id,))
+            recent_events = cursor.fetchall()
+            if recent_events:
+                events_str = "; ".join([f"{e['created_at'][:10]}: {e['event_type']} ({e['count_change']:+d} {e['species']} -> Total: {e['new_total']})" for e in recent_events])
+            else:
+                events_str = "No events logged yet"
+
+            # 3. Expenditures
             cursor.execute("SELECT COUNT(*) as cnt, SUM(amount) as total FROM expenditures WHERE farm_id = ?", (farm_id,))
             exp_row = cursor.fetchone()
             exp_cnt = exp_row['cnt'] if exp_row else 0
@@ -325,12 +525,13 @@ def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB
             f"ACTIVE FARM PROFILE (READ-ONLY TRUTH FROM farm_local.db):\n"
             f"- Farm Name: {farm_name}\n"
             f"- Target Species Scope: {farm_type}\n"
-            f"- Farmer's Custom Details: \"{farm_desc}\"\n"
-            f"- Registered Animals: {animals_str}\n"
+            f"- Farmer's Custom Profile Notes: \"{farm_desc}\"\n"
+            f"- Current Flock Ledger Counts: {flock_str} (Total: {total_animals})\n"
+            f"- Recent Flock Ledger Events: {events_str}\n"
             f"- Total Recorded Expenditures: {exp_cnt} records (Total: NGN {exp_total:,.2f})\n"
         )
     except Exception as e:
-        return "ACTIVE FARM PROFILE: General Farm (0 registered animals)."
+        return "ACTIVE FARM PROFILE: General Farm (0 recorded flock animals)."
 
 
 if __name__ == "__main__":

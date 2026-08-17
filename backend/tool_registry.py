@@ -42,13 +42,35 @@ def match_species(row_species: str, filter_species: str) -> bool:
     return filt_sp in row_sp or row_sp in filt_sp
 
 
-def list_animals(species: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
-    """Retrieve all registered animal profiles from the database, optionally filtered by species."""
+def list_animals(species: str = "", farm_id: str = "default_farm", date_str: str = "") -> Dict[str, Any]:
+    """Retrieve current or historical flock totals from the flock ledger."""
     import database
-    rows = database.get_all_animals(farm_id=farm_id)
-    if species:
-        rows = [r for r in rows if match_species(r.get("species", ""), species)]
-    return {"status": "success", "count": len(rows), "data": rows}
+    if date_str:
+        res = database.get_flock_count_on_date(farm_id=farm_id, species=species or None, target_date=date_str)
+        return {"status": "success", "historical": True, "date": date_str, "data": res}
+    else:
+        totals = database.get_current_flock_totals(farm_id=farm_id)
+        if species:
+            norm_sp = database.normalize_species_name(species)
+            count = totals.get(norm_sp, 0)
+            return {"status": "success", "data": [{"species": norm_sp, "count": count}], "total": count}
+        else:
+            data = [{"species": sp, "count": cnt} for sp, cnt in totals.items()]
+            return {"status": "success", "data": data, "total": sum(totals.values())}
+
+
+def register_flock(species: str, count: int, notes: str = "", event_type: str = "count_update", farm_id: str = "default_farm") -> Dict[str, Any]:
+    """Record a flock count update, purchase, or mortality into the flock ledger."""
+    import database
+    entry = database.record_flock_event(
+        farm_id=farm_id,
+        species=species,
+        count_change=count if event_type in ("purchase", "mortality", "sale") else 0,
+        exact_total=count if event_type not in ("purchase", "mortality", "sale") else None,
+        event_type=event_type,
+        notes=notes
+    )
+    return {"status": "success", "entry": entry, "new_total": entry["new_total"]}
 
 
 def list_expenditures(category: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
@@ -163,6 +185,7 @@ def trigger_vision_reid(image_filepath: str) -> Dict[str, Any]:
 
 TOOL_MAP = {
     "list_animals": list_animals,
+    "register_flock": register_flock,
     "list_expenditures": list_expenditures,
     "list_health_logs": list_health_logs,
     "write_expenditure": write_expenditure,
@@ -176,13 +199,28 @@ TOOL_MAP = {
 TOOL_SCHEMAS = [
     {
         "name": "list_animals",
-        "description": "List all registered animal profiles in the farm database. Use this tool whenever the user asks to see, list, or check what animals exist.",
+        "description": "List current or historical flock totals from the flock ledger. Use this tool whenever the user asks how many animals/chickens they have or had.",
         "parameters": {
             "type": "object",
             "properties": {
-                "species": {"type": "string", "description": "Optional species filter"}
+                "species": {"type": "string", "description": "Optional species filter (e.g. poultry, goat, cattle)"},
+                "date_str": {"type": "string", "description": "Optional historical date filter (YYYY-MM-DD)"}
             },
             "required": []
+        }
+    },
+    {
+        "name": "register_flock",
+        "description": "Record a flock count update, purchase, or mortality event in the flock ledger.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "species": {"type": "string", "description": "Species name (e.g. poultry, goat, cattle)"},
+                "count": {"type": "integer", "description": "Number of animals or change in count"},
+                "event_type": {"type": "string", "description": "Event type: initial_count, purchase, mortality, sale, count_update"},
+                "notes": {"type": "string", "description": "Optional details or reason"}
+            },
+            "required": ["species", "count"]
         }
     },
     {
