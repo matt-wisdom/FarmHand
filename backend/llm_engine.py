@@ -61,18 +61,21 @@ def get_llm() -> Optional[Llama]:
     return _llm_instance
 
 
-def convert_pidgin_to_clean_english(text: str) -> str:
-    """Converts fine-tuned Nigerian Pidgin idioms into standard English for clean translation."""
-    replacements = [
+def clean_english_prose(text: str) -> str:
+    """Transforms raw generated dialect tokens into polished, standard English prose."""
+    phrases = [
+        (r'\bna because of\b', 'This is likely caused by'),
+        (r'\be-cause be\b', 'The cause may be'),
+        (r'\bna likely\b', 'It is likely'),
         (r'\bna well-well\b', 'I understand'),
         (r'\bna properly\b', 'I understand'),
-        (r'\bna likely\b', 'It is likely'),
-        (r'\bna because of\b', 'This is likely caused by'),
+        (r'\bna only say\b', 'The primary causes are'),
+        (r'\bna fit say\b', 'You can'),
+        (r'\bpossible say\b', 'It is possible that'),
         (r'\bmake sure say\b', 'Ensure that'),
-        (r'\bwater dey flow\b', 'water flows'),
-        (r'\bwater dey\b', 'water is'),
-        (r'\be be\b', 'It can be'),
-        (r'\be fit be\b', 'It can be'),
+        (r'\bmake you check say\b', 'Please check that'),
+        (r'\bmake you\b', 'please'),
+        (r'\bmake we\b', 'let us'),
         (r'\bi go fit help you with\b', 'I can help you with'),
         (r'\bi go fit help you\b', 'I can help you'),
         (r'\bi go help you\b', 'I will help you'),
@@ -80,51 +83,62 @@ def convert_pidgin_to_clean_english(text: str) -> str:
         (r'\bi dey help you with\b', 'I can assist you with'),
         (r'\bi dey here to help you\b', 'I am here to assist you'),
         (r'\bi dey well-well\b', 'I am doing well'),
-        (r'\bi dey\b', 'I am'),
-        (r'\bmake you\b', 'please'),
-        (r'\bmake we\b', 'let us'),
-        (r'\bwell-well\b', 'properly'),
-        (r'\bwell-quick-quick\b', 'quickly'),
-        (r'\bno fit\b', 'cannot'),
-        (r'\bno dey\b', 'does not'),
-        (r'\bno let\b', 'do not let'),
-        (r'\bdey show say\b', 'shows that'),
-        (r'\bdey enter for pen\b', 'in the pen'),
-        (r'\bdey recorded for\b', 'recorded in'),
-        (r'\bdey come from\b', 'comes from'),
+        (r'\bwater dey flow\b', 'water flows'),
+        (r'\bwater dey\b', 'water is'),
+        (r'\bwetin you see\b', 'regarding your observation'),
+        (r'\bwetin you suppose do\b', 'Recommended actions:'),
+        (r'\bwetin dey happen\b', 'what is happening'),
+        (r'\bwetin dey cause am\b', 'what causes it'),
+        (r'\bwetin\b', 'what'),
         (r'\bdey cause am\b', 'causes it'),
         (r'\bdey cause\b', 'causes'),
-        (r'\bblister dey come\b', 'blisters come'),
-        (r'\bwey dey\b', 'that is'),
-        (r'\bna so\b', 'that is correct'),
-        (r'\babeg\b', 'please'),
-        (r'\bna only say\b', 'The primary causes are'),
-        (r'\bna fit say\b', 'You can'),
-        (r'\bsay say\b', 'what'),
+        (r'\bdey come from\b', 'comes from'),
+        (r'\bdey come\b', 'comes'),
+        (r'\bdey enter for pen\b', 'in the pen'),
+        (r'\bdey recorded for\b', 'recorded in'),
+        (r'\bdey worse\b', 'get worse'),
+        (r'\bworsen am\b', 'worsen the condition'),
+        (r'\be dey worse\b', 'it gets worse'),
+        (r'\be go worse\b', 'it will get worse'),
+        (r'\be go\b', 'it will'),
+        (r'\be be\b', 'it can be'),
+        (r'\be fit be\b', 'it can be'),
+        (r'\be dey\b', 'it is'),
+        (r'\bwell-well\b', 'properly'),
+        (r'\bwell-quick-quick\b', 'quickly'),
+        (r'\bquick-quick\b', 'quickly'),
+        (r'\bno fit\b', 'cannot'),
+        (r'\bno dey\b', 'does not'),
+        (r'\bno let\b', 'do not allow'),
+        (r'\bno mixing\b', 'avoid mixing'),
+        (r'\bno mix\b', 'do not mix'),
+        (r'\bdey show say\b', 'shows that'),
+        (r'\byou suppose say\b', 'you should verify if'),
+        (r'\byou suppose\b', 'you should'),
         (r'\byou dey record say\b', 'you recorded that'),
         (r'\byou dey\b', 'you are'),
-        (r'\bwetin you see\b', 'regarding your observation'),
-        (r'\bwetin\b', 'what'),
-        (r'\byou fit\b', 'you can'),
         (r'\byou get\b', 'you have'),
-        (r'\byou suppose\b', 'you should'),
-        (r'\bfit trigger am\b', 'can trigger it'),
-        (r'\btrigger am\b', 'trigger it'),
+        (r'\byou fit\b', 'you can'),
         (r'\bif you get\b', 'if you have'),
         (r'\bif dem dey\b', 'if they are'),
         (r'\bdem dey\b', 'they are'),
         (r'\bdem be\b', 'it may be'),
-        (r'\be dey worse\b', 'it gets worse'),
-        (r'\be go worse\b', 'it will get worse'),
-        (r'\be go\b', 'it will'),
-        (r'\bdey worse\b', 'get worse'),
-        (r'\bquick-quick\b', 'quickly'),
-        (r'\be dey help\b', 'it helps'),
+        (r'\bfit trigger am\b', 'can trigger it'),
+        (r'\bfit help\b', 'will help'),
+        (r'\btrigger am\b', 'trigger it'),
         (r'\biver go use\b', 'you can use'),
+        (r'\bsay say\b', 'what'),
+        (r'\bwey dey\b', 'that is'),
+        (r'\bna so\b', 'that is correct'),
+        (r'\babeg\b', 'please'),
+        (r'\bna\s+', 'This is '),
+        (r'\bdey\s+', 'is '),
+        (r'\bdi\s+', 'the '),
     ]
     cleaned = text
-    for pat, rep in replacements:
+    for pat, rep in phrases:
         cleaned = re.sub(pat, rep, cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
 
 
@@ -160,7 +174,7 @@ def handle_fast_intent(query: str, farm_id: str, language: str) -> Optional[str]
     """Provides fast, 100% accurate grounded responses for greetings and farm inventory counts."""
     q = query.lower().strip()
 
-    # 1. Robust Conversational Greetings Handler (0.00s, 100% natural, zero translation artifacts)
+    # 1. Robust Conversational Greetings Handler (0.00s, 100% natural)
     if is_conversational_greeting(q):
         if "gode" in q or "thank" in q:
             if language == "hausa":
@@ -236,7 +250,7 @@ def chat_completion(
     user_prompts = [m.get("content", "").strip() for m in messages if m.get("role") == "user"]
     last_user_query = user_prompts[-1] if user_prompts else ""
 
-    # Step 1: Hausa -> English translation of the latest user turn if needed
+    # Step 1: Translate Hausa input to English for knowledge retrieval if needed
     effective_messages = []
     if norm_lang == "hausa":
         print(f"[llm_engine] Translating user input from Hausa to English: '{last_user_query}'")
@@ -268,7 +282,6 @@ def chat_completion(
     rag_context = ""
     if len(current_query_en) > 5:
         rag_hits = search_knowledge_base(f"{species_scope} {current_query_en}".strip(), top_k=2)
-        # Only include if relevant (not general policy or unrelated animals)
         filtered_snippets = []
         irrelevant_terms = ["gender analysis", "ex-ante", "rendille", "theileria", "macro-economic"]
         for h in rag_hits:
@@ -289,10 +302,15 @@ def chat_completion(
     knowledge_section = f"\nVETERINARY REFERENCE CONTEXT:\n{rag_context}\n" if rag_context.strip() else ""
     species_rule = f"Active Farm: {farm.get('name', 'Farm')} ({farm_species})." if species_scope else ""
 
+    if norm_lang == "pidgin":
+        lang_instruction = "Answer the farmer directly in helpful, warm Nigerian Pidgin with practical clinical causes, first aid, and prevention steps."
+    else:
+        lang_instruction = "Answer the farmer directly with practical clinical causes, first aid, and prevention steps in standard English."
+
     system_prompt = (
         "You are FarmHand AI, an expert agricultural and veterinary advisor for farmers.\n"
         f"{species_rule}\n"
-        "When the farmer describes symptoms, diseases, or questions, answer directly with practical clinical causes, first aid, and prevention steps in plain English.\n"
+        f"{lang_instruction}\n"
         "Do NOT change the subject. Do NOT output random numbers, JSON brackets, or code."
         f"{knowledge_section}"
     )
@@ -321,17 +339,20 @@ def chat_completion(
     print(f"[llm_engine] Inference completed in {gen_duration:.2f}s | Output: {raw_output[:100]}...")
 
     # Step 6: Post-process & Language formatting
-    final_output = convert_pidgin_to_clean_english(raw_output)
-
-    if norm_lang == "hausa":
+    if norm_lang == "pidgin":
+        final_output = raw_output  # Authentic Pidgin preserved!
+    elif norm_lang == "hausa":
+        clean_en = clean_english_prose(raw_output)
         print(f"[llm_engine] Translating cleaned response to Hausa...")
-        ha_translated = translate_en_to_ha(final_output)
+        ha_translated = translate_en_to_ha(clean_en)
         religious_artifacts = ["littafi mai tsarki", "ãdalci", "sikẽlin", "la'ĩmi", "al'ummai", "karin magana"]
         if any(art in ha_translated.lower() for art in religious_artifacts):
             print(f"[llm_engine] Detected MarianMT religious artifact in translation. Using clean advisory format.")
-            final_output = f"Shawarar FarmHand: {final_output}"
+            final_output = f"Shawarar FarmHand: {clean_en}"
         else:
             final_output = ha_translated
+    else:  # English
+        final_output = clean_english_prose(raw_output)
 
     total_time = time.time() - turn_start
     print(f"[llm_engine] TOTAL TURN TIME: {total_time:.2f}s")
