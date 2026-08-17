@@ -406,56 +406,193 @@
 
         <!-- VIEW TAB 4: FLOCK & HERD LEDGER TAB -->
         <section v-if="currentTab === 'health'" class="view-container">
-          <div class="section-header-flex">
-            <h2 class="section-heading">Flock & Herd Ledger</h2>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-green" @click="showAddFlockModal = true">+ Log Flock Event</button>
+          <div class="page-header-row">
+            <div class="page-header-title">
+              <h2>Flock & Herd Ledger</h2>
+              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 2px;">Real-time headcounts, transaction logs, and immutable audit history for {{ activeFarm?.name || 'your farm' }}.</p>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn-secondary-green" @click="openAddFlockModal('purchase')">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>+ Purchase</span>
+              </button>
+              <button class="btn-secondary-green" @click="openAddFlockModal('mortality')" style="border-color: rgba(225, 29, 72, 0.3); color: var(--accent-rose);">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>- Mortality</span>
+              </button>
+              <button class="btn-green" @click="openAddFlockModal('count_update')">
+                <span>+ Log Flock Event</span>
+              </button>
             </div>
           </div>
 
-          <!-- Live Species Count Metric Cards -->
-          <div class="stats-grid" style="margin-bottom: 24px;">
-            <div class="stat-card" v-for="(cnt, sp) in flockTotals" :key="sp">
-              <div class="stat-lbl">{{ sp }} Flock</div>
-              <div class="stat-val">{{ cnt }} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">heads</span></div>
+          <!-- Hero Species Count Cards Grid -->
+          <div class="flock-hero-grid">
+            <!-- Total Animals Overview Card -->
+            <div class="flock-species-card" style="border-left: 4px solid var(--accent-green);">
+              <div class="flock-species-header">
+                <span class="flock-species-title">TOTAL HERD SIZE</span>
+                <div class="species-icon-wrap" style="background: rgba(5, 150, 105, 0.12); color: var(--accent-green);">🐾</div>
+              </div>
+              <div>
+                <span class="flock-species-count">{{ totalFlockSize }}</span>
+                <span class="flock-species-unit">total animals</span>
+              </div>
+              <div style="font-size: 0.76rem; color: var(--text-muted);">
+                Active across {{ Object.keys(flockTotals).length }} tracked species
+              </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-lbl">Total Animals</div>
-              <div class="stat-val">{{ totalFlockSize }} <span style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted);">total</span></div>
+
+            <!-- Per-Species Cards -->
+            <div class="flock-species-card" v-for="(cnt, sp) in flockTotals" :key="sp">
+              <div class="flock-species-header">
+                <span class="flock-species-title">{{ sp }} FLOCK</span>
+                <div class="species-icon-wrap">{{ getSpeciesEmoji(sp) }}</div>
+              </div>
+              <div>
+                <span class="flock-species-count">{{ cnt }}</span>
+                <span class="flock-species-unit">heads</span>
+              </div>
+              <div style="font-size: 0.76rem; color: var(--text-green); display: flex; align-items: center; gap: 4px;">
+                <span class="badge badge-green" style="font-size: 0.7rem; padding: 2px 8px;">Active Flock</span>
+              </div>
             </div>
           </div>
-          
-          <div style="margin-bottom: 24px;">
-            <h3>Flock Audit & Count History</h3>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Date & Time</th>
-                    <th>Species</th>
-                    <th>Event Type</th>
-                    <th>Count Change</th>
-                    <th>New Balance</th>
-                    <th>Notes / Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="entry in flockHistory" :key="entry.id">
-                    <td><code>{{ entry.created_at }}</code></td>
-                    <td><strong>{{ entry.species }}</strong></td>
-                    <td><span class="badge" :class="entry.count_change >= 0 ? 'badge-green' : 'badge-yellow'">{{ entry.event_type }}</span></td>
-                    <td :style="{ color: entry.count_change >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 'bold' }">
-                      {{ entry.count_change >= 0 ? '+' + entry.count_change : entry.count_change }}
-                    </td>
-                    <td><strong>{{ entry.new_total }}</strong></td>
-                    <td>{{ entry.notes || '—' }}</td>
-                  </tr>
-                  <tr v-if="flockHistory.length === 0">
-                    <td colspan="6" style="text-align: center; color: var(--text-muted);">No flock records in ledger yet. Use '+ Log Flock Event' or tell FarmHand AI in chat.</td>
-                  </tr>
-                </tbody>
-              </table>
+
+          <!-- Aggregate Metric Summary Strip -->
+          <div class="flock-summary-strip">
+            <div class="summary-stat-pill">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <span>Total Headcount: <strong>{{ totalFlockSize }}</strong></span>
             </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat-pill">
+              <span>Species Groups: <strong>{{ Object.keys(flockTotals).length }}</strong></span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat-pill">
+              <span>Ledger Records: <strong>{{ flockHistory.length }}</strong></span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat-pill">
+              <span>Last Event: <strong>{{ flockHistory[0]?.created_at || 'None' }}</strong></span>
+            </div>
+          </div>
+
+          <!-- Historical Date Count Lookup Explorer -->
+          <div class="historical-lookup-card">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 2px;">Point-in-Time Historical Balance Explorer</h4>
+                <p style="font-size: 0.78rem; color: var(--text-muted);">Check your exact reconciled animal counts as of any specific past date.</p>
+              </div>
+            </div>
+            <div class="historical-lookup-row">
+              <input type="date" class="filter-input" style="padding: 8px 12px; font-size: 0.88rem;" v-model="historicalLookupDate">
+              <button class="btn-secondary-green" style="padding: 8px 16px; font-size: 0.84rem;" @click="lookupHistoricalFlockCount">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Calculate Balance</span>
+              </button>
+            </div>
+            <div v-if="historicalLookupResult" class="historical-result-box">
+              <div>
+                <strong>As of {{ historicalLookupResult.as_of_date }}:</strong> 
+                {{ historicalLookupResult.total_flock_size }} total animals
+                <span v-if="Object.keys(historicalLookupResult.species_counts || {}).length" style="color: var(--text-muted); margin-left: 6px;">
+                  ({{ Object.entries(historicalLookupResult.species_counts).map(([k,v]) => k + ': ' + v).join(', ') }})
+                </span>
+              </div>
+              <button class="btn-icon-sm" @click="historicalLookupResult = null" style="border: none; background: transparent; cursor: pointer;">✕</button>
+            </div>
+          </div>
+
+          <!-- Flock Audit Ledger Table Card -->
+          <div class="table-card">
+            <div class="table-header-bar">
+              <div>
+                <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main);">Flock Audit History & Transactions</h3>
+                <span style="font-size: 0.78rem; color: var(--text-muted);">Immutable chronological ledger entries</span>
+              </div>
+            </div>
+
+            <!-- Filter Toolbar -->
+            <div class="filter-toolbar">
+              <div class="filter-group">
+                <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">Species:</label>
+                <select class="filter-select" v-model="flockFilterSpecies">
+                  <option value="">All Species</option>
+                  <option v-for="(cnt, sp) in flockTotals" :key="sp" :value="sp">{{ sp }}</option>
+                </select>
+
+                <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-left: 8px;">Event:</label>
+                <select class="filter-select" v-model="flockFilterEvent">
+                  <option value="">All Events</option>
+                  <option value="purchase">Purchase (+)</option>
+                  <option value="mortality">Mortality (-)</option>
+                  <option value="sale">Sale (-)</option>
+                  <option value="initial_count">Initial Setup</option>
+                  <option value="count_update">Count Update</option>
+                </select>
+              </div>
+
+              <div class="filter-group">
+                <input type="text" class="filter-input" placeholder="Search notes or reason..." v-model="flockSearchQuery" style="min-width: 200px;">
+              </div>
+            </div>
+
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Species</th>
+                  <th>Event Type</th>
+                  <th>Delta (Change)</th>
+                  <th>Running Balance</th>
+                  <th>Notes / Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in filteredFlockHistory" :key="entry.id">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px; font-family: monospace; font-size: 0.82rem;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                      {{ entry.created_at }}
+                    </div>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                      <span>{{ getSpeciesEmoji(entry.species) }}</span>
+                      <span>{{ entry.species }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge" :class="{
+                      'badge-green': entry.event_type === 'purchase',
+                      'badge-rose': entry.event_type === 'mortality',
+                      'badge-amber': entry.event_type === 'sale',
+                      'badge-blue': entry.event_type === 'initial_count' || entry.event_type === 'count_update'
+                    }">
+                      {{ entry.event_type }}
+                    </span>
+                  </td>
+                  <td :style="{ color: entry.count_change > 0 ? 'var(--accent-green)' : (entry.count_change < 0 ? 'var(--accent-rose)' : 'var(--text-muted)'), fontWeight: '700', fontSize: '0.92rem' }">
+                    {{ entry.count_change > 0 ? '+' + entry.count_change : (entry.count_change === 0 ? '±0' : entry.count_change) }}
+                  </td>
+                  <td>
+                    <span style="font-weight: 800; font-size: 0.95rem; color: var(--text-main);">{{ entry.new_total }}</span>
+                    <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: 2px;">heads</span>
+                  </td>
+                  <td style="color: var(--text-muted); font-size: 0.85rem;">{{ entry.notes || '—' }}</td>
+                </tr>
+                <tr v-if="filteredFlockHistory.length === 0">
+                  <td colspan="6" style="text-align: center; padding: 36px 16px; color: var(--text-muted);">
+                    <div style="font-size: 1.8rem; margin-bottom: 8px;">📋</div>
+                    <div style="font-weight: 600; color: var(--text-main);">No matching flock ledger records</div>
+                    <div style="font-size: 0.8rem; margin-top: 4px;">Use '+ Purchase', '- Mortality', or speak with FarmHand AI to record flock counts.</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -717,47 +854,90 @@
 
     <!-- MODAL: LOG FLOCK EVENT -->
     <div v-if="showAddFlockModal" class="modal-overlay" @click.self="showAddFlockModal = false">
-      <div class="modal-card">
-        <div class="modal-header-bar">
-          <h3>Log Flock / Herd Event</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddFlockModal = false">✕</button>
+      <div class="modal-card" style="max-width: 520px;">
+        <div class="modal-header-hero">
+          <div class="hero-icon-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+            </svg>
+          </div>
+          <div class="hero-text-content">
+            <h3 class="hero-title">Log Flock / Herd Event</h3>
+            <p class="hero-subtitle">Record purchases, mortalities, sales, or reconcile total headcounts.</p>
+          </div>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddFlockModal = false">✕</button>
         </div>
+
         <div class="modal-body-content">
+          <!-- Segmented Event Type Selector -->
           <div class="form-group">
-            <label>Species</label>
+            <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">1. Select Event Type</label>
+            <div class="segmented-event-picker">
+              <div class="segmented-event-card" :class="{ selected: newFlockEvent.event_type === 'purchase' }" @click="newFlockEvent.event_type = 'purchase'">
+                <div class="event-card-icon">🛒</div>
+                <div class="event-card-info">
+                  <span class="event-card-title">Purchase / Addition</span>
+                  <span class="event-card-sub">+ Inflow to flock</span>
+                </div>
+              </div>
+              <div class="segmented-event-card" :class="{ selected: newFlockEvent.event_type === 'mortality' }" @click="newFlockEvent.event_type = 'mortality'">
+                <div class="event-card-icon">⚠️</div>
+                <div class="event-card-info">
+                  <span class="event-card-title">Mortality / Loss</span>
+                  <span class="event-card-sub">- Outflow / Death</span>
+                </div>
+              </div>
+              <div class="segmented-event-card" :class="{ selected: newFlockEvent.event_type === 'sale' }" @click="newFlockEvent.event_type = 'sale'">
+                <div class="event-card-icon">💰</div>
+                <div class="event-card-info">
+                  <span class="event-card-title">Sale / Transfer</span>
+                  <span class="event-card-sub">- Market sale</span>
+                </div>
+              </div>
+              <div class="segmented-event-card" :class="{ selected: newFlockEvent.event_type === 'count_update' }" @click="newFlockEvent.event_type = 'count_update'">
+                <div class="event-card-icon">📝</div>
+                <div class="event-card-info">
+                  <span class="event-card-title">Set Exact Total</span>
+                  <span class="event-card-sub">= Reconcile count</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Species Selector -->
+          <div class="form-group">
+            <label>2. Species Group</label>
             <select class="form-control" v-model="newFlockEvent.species">
-              <option value="Poultry">Poultry / Chickens</option>
-              <option value="Goat">Goats</option>
-              <option value="Sheep">Sheep</option>
-              <option value="Cattle">Cattle / Cows</option>
-              <option value="Pig">Pigs</option>
+              <option value="Poultry">🐔 Poultry / Chickens</option>
+              <option value="Goat">🐐 Goats</option>
+              <option value="Cattle">🐄 Cattle / Cows</option>
+              <option value="Sheep">🐑 Sheep</option>
+              <option value="Pig">🐖 Pigs</option>
+              <option value="Fish">🐟 Fish</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Event Type</label>
-            <select class="form-control" v-model="newFlockEvent.event_type">
-              <option value="purchase">Purchase / Addition (+)</option>
-              <option value="mortality">Mortality / Loss (-)</option>
-              <option value="sale">Sale / Transfer (-)</option>
-              <option value="count_update">Set Exact Total Count</option>
-            </select>
-          </div>
+
+          <!-- Count Input -->
           <div class="form-group" v-if="newFlockEvent.event_type !== 'count_update'">
-            <label>Count Change (Number of Animals)</label>
-            <input type="number" class="form-control" placeholder="e.g. 10" v-model.number="newFlockEvent.count_change">
+            <label>3. Number of Animals (Count Change)</label>
+            <input type="number" class="form-control" placeholder="e.g. 10" v-model.number="newFlockEvent.count_change" min="1">
           </div>
           <div class="form-group" v-if="newFlockEvent.event_type === 'count_update'">
-            <label>New Exact Total Count</label>
-            <input type="number" class="form-control" placeholder="e.g. 50" v-model.number="newFlockEvent.exact_total">
+            <label>3. New Exact Total Flock Count</label>
+            <input type="number" class="form-control" placeholder="e.g. 50" v-model.number="newFlockEvent.exact_total" min="0">
           </div>
+
+          <!-- Notes -->
           <div class="form-group">
-            <label>Notes / Reason</label>
-            <textarea class="form-control" rows="2" placeholder="e.g. Bought from market, died of cold..." v-model="newFlockEvent.notes"></textarea>
+            <label>4. Notes / Reason (Optional)</label>
+            <textarea class="form-control" rows="2" placeholder="e.g. Batch #4 bought from local hatchery, or sudden chill..." v-model="newFlockEvent.notes"></textarea>
           </div>
         </div>
+
         <div class="modal-footer-bar">
           <button class="btn-secondary-green" @click="showAddFlockModal = false">Cancel</button>
-          <button class="btn-green" @click="submitFlockEvent">Save to Ledger</button>
+          <button class="btn-green" @click="submitFlockEvent">Save to Ledger →</button>
         </div>
       </div>
     </div>
@@ -872,12 +1052,68 @@
         const telemetry = ref([]);
         const animals = ref([]);
 
-        // Flock Ledger State
+        // Flock Ledger State & Filtering
         const flockTotals = ref({});
         const flockHistory = ref([]);
         const totalFlockSize = ref(0);
         const showAddFlockModal = ref(false);
         const newFlockEvent = ref({ species: 'Poultry', count_change: 0, exact_total: null, event_type: 'purchase', notes: '' });
+
+        const flockFilterSpecies = ref('');
+        const flockFilterEvent = ref('');
+        const flockSearchQuery = ref('');
+        const historicalLookupDate = ref(new Date().toISOString().split('T')[0]);
+        const historicalLookupResult = ref(null);
+
+        const getSpeciesEmoji = (species) => {
+          const s = (species || '').toLowerCase();
+          if (s.includes('poultry') || s.includes('chick') || s.includes('hen') || s.includes('bird') || s.includes('layer') || s.includes('broiler')) return '🐔';
+          if (s.includes('goat') || s.includes('akuya') || s.includes('awaki')) return '🐐';
+          if (s.includes('cattle') || s.includes('cow') || s.includes('bull') || s.includes('shanu') || s.includes('saniya')) return '🐄';
+          if (s.includes('sheep') || s.includes('ram') || s.includes('tumaki')) return '🐑';
+          if (s.includes('pig') || s.includes('swine')) return '🐖';
+          if (s.includes('fish') || s.includes('kifi') || s.includes('catfish')) return '🐟';
+          return '🐾';
+        };
+
+        const filteredFlockHistory = computed(() => {
+          return flockHistory.value.filter(entry => {
+            if (flockFilterSpecies.value && entry.species !== flockFilterSpecies.value) return false;
+            if (flockFilterEvent.value && entry.event_type !== flockFilterEvent.value) return false;
+            if (flockSearchQuery.value) {
+              const q = flockSearchQuery.value.toLowerCase();
+              const notes = (entry.notes || '').toLowerCase();
+              const sp = (entry.species || '').toLowerCase();
+              const evt = (entry.event_type || '').toLowerCase();
+              if (!notes.includes(q) && !sp.includes(q) && !evt.includes(q)) return false;
+            }
+            return true;
+          });
+        });
+
+        const openAddFlockModal = (eventType = 'purchase') => {
+          newFlockEvent.value = {
+            species: activeFarm.value?.farm_type && activeFarm.value?.farm_type !== 'General' ? activeFarm.value.farm_type : 'Poultry',
+            count_change: eventType === 'mortality' ? 1 : 10,
+            exact_total: null,
+            event_type: eventType,
+            notes: ''
+          };
+          showAddFlockModal.value = true;
+        };
+
+        const lookupHistoricalFlockCount = async () => {
+          if (!activeFarmId.value || !historicalLookupDate.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/flock-ledger/count?date=${historicalLookupDate.value}`);
+            if (res.ok) {
+              const data = await res.json();
+              historicalLookupResult.value = data;
+            }
+          } catch (e) {
+            console.error('Error looking up historical flock count:', e);
+          }
+        };
 
         // Modals & Form States
         const showAddExpenditureModal = ref(false);
@@ -1312,6 +1548,15 @@
           totalFlockSize,
           showAddFlockModal,
           newFlockEvent,
+          flockFilterSpecies,
+          flockFilterEvent,
+          flockSearchQuery,
+          filteredFlockHistory,
+          historicalLookupDate,
+          historicalLookupResult,
+          lookupHistoricalFlockCount,
+          openAddFlockModal,
+          getSpeciesEmoji,
           fetchFlockLedger,
           submitFlockEvent,
           editingMsgId,
