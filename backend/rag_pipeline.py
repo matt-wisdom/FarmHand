@@ -148,11 +148,11 @@ def vector_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
     query_np = np.array([query_vector], dtype=np.float32)
     faiss.normalize_L2(query_np)
 
-    distances, indices = faiss_idx.search(query_np, min(top_k, faiss_idx.ntotal))
+    distances, indices = faiss_idx.search(query_np, min(top_k * 5, faiss_idx.ntotal))
 
     results = []
     if len(indices) > 0 and len(indices[0]) > 0:
-        hit_ids = [int(i) for i in indices[0] if i >= 0]
+        hit_ids = [int(i.item()) if hasattr(i, 'item') else int(i) for i in indices[0] if i >= 0]
         if not hit_ids:
             return []
 
@@ -174,6 +174,8 @@ def vector_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
                 item["score"] = float(dist)
                 item["vector_rank"] = results.__len__()
                 results.append(item)
+                if len(results) >= top_k:
+                    break
 
     return results
 
@@ -193,7 +195,7 @@ def get_bm25_retriever() -> Any:
 
 
 def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-    """BM25 keyword-based search using library."""
+    """BM25 keyword-based search using bm25s library."""
     print(f"[rag_pipeline] BM25 search called with query: '{query}'")
 
     retriever = get_bm25_retriever()
@@ -201,59 +203,42 @@ def bm25_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         print("[rag_pipeline] BM25 retriever is None!")
         return []
 
-    # Tokenize query
-    import Stemmer
-    stemmer = Stemmer.Stemmer("english")
-    print(f"[rag_pipeline] Tokenizing query...")
-    query_tokens = bm25s.tokenize([query], stemmer=stemmer)
-    print(f"[rag_pipeline] Query tokens: {query_tokens}")
-
-    # Search
-    print(f"[rag_pipeline] Running BM25.retrieve()...")
-    results = retriever.retrieve(query_tokens)
-    print(f"[rag_pipeline] BM25 results type: {type(results)}, len: {len(results) if results else 0}")
-
-    # Get indices and scores
-    if not results or not results[0]:
-        print("[rag_pipeline] BM25 results empty!")
+    try:
+        import Stemmer
+        stemmer = Stemmer.Stemmer("english")
+        query_tokens = bm25s.tokenize([query], stemmer=stemmer)
+        res = retriever.retrieve(query_tokens, k=top_k * 5)
+        
+        doc_indices = res.documents[0] if hasattr(res, "documents") else []
+        scores = res.scores[0] if hasattr(res, "scores") else []
+        
+        if len(doc_indices) == 0:
+            return []
+            
+        sqlite_ids = [int(idx.item()) + 1 if hasattr(idx, 'item') else int(idx) + 1 for idx in doc_indices]
+        placeholders = ",".join(["?"] * len(sqlite_ids))
+        
+        with get_db_connection(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT id, filename, chunk_id, text FROM document_chunks WHERE id IN ({placeholders})", sqlite_ids)
+            rows = {r["id"]: dict(r) for r in cursor.fetchall()}
+            
+        final_results = []
+        for rank, (idx, score) in enumerate(zip(doc_indices, scores)):
+            db_id = int(idx.item()) + 1 if hasattr(idx, 'item') else int(idx) + 1
+            if db_id in rows:
+                item = rows[db_id]
+                item["score"] = float(score)
+                item["bm25_rank"] = rank
+                final_results.append(item)
+                if len(final_results) >= top_k:
+                    break
+                
+        print(f"[rag_pipeline] BM25 returning {len(final_results)} results")
+        return final_results
+    except Exception as e:
+        print(f"[rag_pipeline] BM25 retrieve ERROR: {e}")
         return []
-
-    # Extract corpus indices from results
-    print(f"[rag_pipeline] Results[0] type: {type(results[0])}")
-    print(f"[rag_pipeline] Results[0] attrs: {dir(results[0])}")
-
-    # Try different ways to get indices
-    if hasattr(results[0], 'doc_indices'):
-        doc_indices = results[0].doc_indices[0]
-        print(f"[rag_pipeline] Got doc_indices: {doc_indices}")
-    elif hasattr(results[0], 'indices'):
-        doc_indices = results[0].indices[0]
-    else:
-        doc_indices = list(range(min(top_k, len(results[0].scores[0]) if hasattr(results[0], 'scores') else 0)))
-        print(f"[rag_pipeline] Using fallback indices: {doc_indices}")
-
-    scores = results[0].scores[0] if hasattr(results[0], 'scores') else []
-    print(f"[rag_pipeline] Scores: {scores[:5] if scores else 'None'}")
-
-    # Map to chunk IDs (BM25 index order matches chunk order in DB)
-    with get_db_connection(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, filename, chunk_id, text FROM document_chunks ORDER BY id")
-        all_chunks = list(cursor.fetchall())
-
-    if not all_chunks:
-        return []
-
-    # Get top-k results
-    final_results = []
-    for i, idx in enumerate(doc_indices[:top_k]):
-        if idx < len(all_chunks):
-            item = dict(all_chunks[idx])
-            item["score"] = float(scores[i]) if i < len(scores) else 0.0
-            item["bm25_rank"] = i
-            final_results.append(item)
-
-    return final_results
 
 
 def combine_results(bm25_results: List[Dict], vector_results: List[Dict], top_k: int) -> List[Dict]:

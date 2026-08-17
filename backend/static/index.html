@@ -46,7 +46,7 @@
           <button class="farm-selector-btn" style="width: 100%; justify-content: space-between;" @click="toggleFarmDropdown" title="Switch Active Farm Profile">
             <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
               <span class="farm-type-badge">{{ getFarmTypeBadge(activeFarm?.farm_type) }}</span>
-              <span class="farm-name-text" style="max-width: 130px;">{{ activeFarm?.name || 'My Main Farm' }}</span>
+              <span class="farm-name-text" style="max-width: 130px;">{{ activeFarm?.name || 'Select Farm' }}</span>
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9"></polyline>
@@ -87,13 +87,13 @@
           </button>
 
           <div v-if="showLangDropdown" class="farm-dropdown-menu" style="min-width: 120px; left: 0; right: 0;">
-            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'english' }" @click="selectedLanguage = 'english'; showLangDropdown = false">
+            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'english' }" @click="selectLanguage('english')">
               <div class="farm-item-title">English</div>
             </div>
-            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'hausa' }" @click="selectedLanguage = 'hausa'; showLangDropdown = false">
+            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'hausa' }" @click="selectLanguage('hausa')">
               <div class="farm-item-title">Hausa</div>
             </div>
-            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'pidgin' }" @click="selectedLanguage = 'pidgin'; showLangDropdown = false">
+            <div class="farm-dropdown-item" :class="{ active: selectedLanguage === 'pidgin' }" @click="selectLanguage('pidgin')">
               <div class="farm-item-title">Pidgin</div>
             </div>
           </div>
@@ -721,9 +721,59 @@
         const isEditingFarm = ref(false);
         const farmForm = ref({ name: '', farm_type: 'General', description: '' });
 
-        // Language selector state
-        const selectedLanguage = ref('english'); // english, hausa, pidgin
+        // Language selector state with rock-solid localStorage persistence & cross-tab sync
+        const normalizeLang = (lang) => {
+          if (!lang) return 'english';
+          const l = String(lang).trim().toLowerCase();
+          if (l === 'ha' || l === 'hausa' || l.startsWith('ha-') || l.includes('hausa')) return 'hausa';
+          if (l === 'pg' || l === 'pidgin' || l === 'pcm' || l.startsWith('pid') || l.includes('pidgin')) return 'pidgin';
+          return 'english';
+        };
+
+        const getSavedLanguage = () => {
+          try {
+            const val = localStorage.getItem('farmhand_selected_language');
+            return normalizeLang(val);
+          } catch (e) {
+            console.error('Error reading language from localStorage:', e);
+            return 'english';
+          }
+        };
+
+        const selectedLanguage = ref(getSavedLanguage());
         const showLangDropdown = ref(false);
+
+        const selectLanguage = (lang) => {
+          const norm = normalizeLang(lang);
+          selectedLanguage.value = norm;
+          try {
+            localStorage.setItem('farmhand_selected_language', norm);
+          } catch (e) {
+            console.error('Error saving language to localStorage:', e);
+          }
+          showLangDropdown.value = false;
+        };
+
+        watch(selectedLanguage, (newLang) => {
+          if (newLang) {
+            const norm = normalizeLang(newLang);
+            try {
+              localStorage.setItem('farmhand_selected_language', norm);
+            } catch (e) {}
+          }
+        });
+
+        // Sync language state if updated in another tab or window
+        try {
+          window.addEventListener('storage', (event) => {
+            if (event.key === 'farmhand_selected_language' && event.newValue) {
+              const norm = normalizeLang(event.newValue);
+              if (norm !== selectedLanguage.value) {
+                selectedLanguage.value = norm;
+              }
+            }
+          });
+        } catch (e) {}
 
         // Message Editing state
         const editingMsgId = ref(null);
@@ -1044,7 +1094,8 @@
               body: JSON.stringify({
                 thread_id: activeThreadId.value,
                 user_input: userText,
-                farm_id: activeFarmId.value
+                farm_id: activeFarmId.value,
+                language: selectedLanguage.value
               })
             });
 
@@ -1105,13 +1156,13 @@
         };
 
         onMounted(async () => {
+          selectedLanguage.value = getSavedLanguage();
           await fetchFarms();
-          if (farms.value.length === 0 || (farms.value.length === 1 && farms.value[0].id === 'default_farm' && farms.value[0].name === 'My Main Farm')) {
+          if (farms.value.length === 0) {
             openCreateFarmModal();
           }
           await fetchThreads();
           await fetchHealth();
-          setInterval(fetchHealth, 5000);
           isLoading.value = false;
         });
 
@@ -1131,6 +1182,7 @@
           farmForm,
           selectedLanguage,
           showLangDropdown,
+          selectLanguage,
           getFarmTypeBadge,
           toggleFarmDropdown,
           switchActiveFarm,

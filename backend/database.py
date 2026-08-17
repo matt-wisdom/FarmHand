@@ -6,13 +6,12 @@ from typing import Any, Dict, List, Optional
 
 # Database file path setup
 BASE_DIR = Path(__file__).resolve().parent
-DB_DIR = BASE_DIR / "data"
-DB_PATH = DB_DIR / "farm_local.db"
+DB_PATH = BASE_DIR / "farm_local.db"
 
 
 def ensure_dirs():
-    """Ensure data directory exists."""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
+    """Ensure database parent directory exists."""
+    pass
 
 
 def get_db_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -137,13 +136,7 @@ def init_db(db_path: Path = DB_PATH):
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
-        # Seed Default Farm if no farms exist
-        cursor.execute("SELECT COUNT(*) as cnt FROM farms")
-        if cursor.fetchone()["cnt"] == 0:
-            cursor.execute(
-                "INSERT INTO farms (id, name, farm_type, description) VALUES (?, ?, ?, ?)",
-                ("default_farm", "My Main Farm", "General", "Default general farm profile")
-            )
+        # Migration complete
 
 
 # -------------------------------------------------------------------
@@ -193,9 +186,7 @@ def update_farm(farm_id: str, name: str, farm_type: str, description: str, db_pa
 
 
 def delete_farm(farm_id: str, db_path: Path = DB_PATH) -> bool:
-    """Delete a farm profile and associated threads."""
-    if farm_id == "default_farm":
-        return False  # Prevent deleting default farm
+    """Delete a farm profile and associated records."""
     with get_db_connection(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM farms WHERE id = ?", (farm_id,))
@@ -314,7 +305,7 @@ def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB
     """
     try:
         farm = get_farm_by_id(farm_id, db_path)
-        farm_name = farm["name"] if farm else "My Main Farm"
+        farm_name = farm["name"] if farm else "General Farm"
         farm_type = farm["farm_type"] if farm else "General"
         farm_desc = farm["description"] if farm and farm.get("description") else "No custom description provided."
 

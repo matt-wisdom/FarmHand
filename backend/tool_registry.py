@@ -18,28 +18,52 @@ def get_rag_module():
 # Database Tool Implementations
 # -------------------------------------------------------------------
 
-def list_animals(species: str = "") -> Dict[str, Any]:
+SPECIES_SYNONYMS = {
+    "poultry": {"poultry", "chicken", "chickens", "layer", "layers", "broiler", "broilers", "pullet", "pullets", "cockerel", "cockerels", "fowl", "chick", "chicks", "hen", "hens", "rooster", "roosters"},
+    "goat": {"goat", "goats", "buck", "bucks", "doe", "does", "kid", "kids"},
+    "cattle": {"cattle", "cow", "cows", "bull", "bulls", "calf", "calves", "heifer", "heifers"},
+    "sheep": {"sheep", "ram", "rams", "ewe", "ewes", "lamb", "lambs"},
+    "pig": {"pig", "pigs", "swine", "hog", "hogs", "piglet", "piglets"},
+    "fish": {"fish", "catfish", "tilapia", "aquaculture"},
+}
+
+
+def match_species(row_species: str, filter_species: str) -> bool:
+    if not filter_species or filter_species.lower() in ("all", "any", "none", "*", ""):
+        return True
+    row_sp = row_species.strip().lower()
+    filt_sp = filter_species.strip().lower()
+    if row_sp == filt_sp:
+        return True
+    for group, synonyms in SPECIES_SYNONYMS.items():
+        if filt_sp in synonyms or filt_sp == group:
+            if row_sp in synonyms or row_sp == group:
+                return True
+    return filt_sp in row_sp or row_sp in filt_sp
+
+
+def list_animals(species: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Retrieve all registered animal profiles from the database, optionally filtered by species."""
     import database
-    rows = database.get_all_animals()
+    rows = database.get_all_animals(farm_id=farm_id)
     if species:
-        rows = [r for r in rows if r.get("species", "").lower() == species.lower()]
+        rows = [r for r in rows if match_species(r.get("species", ""), species)]
     return {"status": "success", "count": len(rows), "data": rows}
 
 
-def list_expenditures(category: str = "") -> Dict[str, Any]:
+def list_expenditures(category: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Retrieve all recorded financial expenditures from the database, optionally filtered by category."""
     import database
-    rows = database.get_all_expenditures()
+    rows = database.get_all_expenditures(farm_id=farm_id)
     if category:
-        rows = [r for r in rows if r.get("category", "").lower() == category.lower()]
+        rows = [r for r in rows if category.lower() in r.get("category", "").lower() or r.get("category", "").lower() in category.lower()]
     return {"status": "success", "count": len(rows), "data": rows}
 
 
-def list_health_logs(animal_id: str = "") -> Dict[str, Any]:
+def list_health_logs(animal_id: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Retrieve all recorded animal health check logs from the database, optionally filtered by animal_id."""
     import database
-    rows = database.get_all_health_logs()
+    rows = database.get_all_health_logs(farm_id=farm_id)
     if animal_id:
         rows = [r for r in rows if r.get("animal_id", "").lower() == animal_id.lower()]
     return {"status": "success", "count": len(rows), "data": rows}
@@ -260,15 +284,23 @@ TOOL_SCHEMAS = [
 def normalize_tool_arguments(function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize common argument key variations produced by LLMs in a pure, scalable way."""
     norm_args = dict(args)
+    # Unpack nested arguments if produced by LLM
+    if "arguments" in norm_args and isinstance(norm_args["arguments"], dict):
+        for k, v in norm_args["arguments"].items():
+            if k not in norm_args:
+                norm_args[k] = v
 
     if function_name == "list_animals":
-        return {"species": str(norm_args.get("species", ""))}
+        sp = norm_args.get("species") or norm_args.get("animal_type") or norm_args.get("target_species") or norm_args.get("animal") or ""
+        return {"species": str(sp).strip()}
 
     elif function_name == "list_expenditures":
-        return {"category": str(norm_args.get("category", ""))}
+        cat = norm_args.get("category") or norm_args.get("type") or ""
+        return {"category": str(cat).strip()}
 
     elif function_name == "list_health_logs":
-        return {"animal_id": str(norm_args.get("animal_id", ""))}
+        aid = norm_args.get("animal_id") or norm_args.get("id") or ""
+        return {"animal_id": str(aid).strip()}
 
     elif function_name == "write_health_log":
         animal_id = norm_args.get("animal_id") or norm_args.get("node_id") or norm_args.get("id") or "UNKNOWN"
@@ -302,13 +334,24 @@ def normalize_tool_arguments(function_name: str, args: Dict[str, Any]) -> Dict[s
     return norm_args
 
 
-def execute_tool(function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute a tool function by name with provided arguments dictionary."""
+def execute_tool(function_name: str, arguments: Dict[str, Any], farm_id: str = "default_farm") -> Dict[str, Any]:
+    """Execute a tool function by name with provided arguments dictionary and farm_id context."""
+    # Redirection safety net: if get_animal_record was called with no ID or generic ID like "all" or "count"
+    if function_name == "get_animal_record":
+        aid = str(arguments.get("id", "")).strip().lower()
+        if not aid or aid in ("all", "count", "none", "*") or "node_type" in arguments or "query_type" in arguments:
+            sp = arguments.get("species") or arguments.get("node_type") or arguments.get("target_species") or ""
+            return list_animals(species=str(sp), farm_id=farm_id)
+
     if function_name not in TOOL_MAP:
         return {"status": "error", "message": f"Unknown function '{function_name}'"}
     try:
         fn = TOOL_MAP[function_name]
         clean_args = normalize_tool_arguments(function_name, arguments)
+        import inspect
+        sig = inspect.signature(fn)
+        if "farm_id" in sig.parameters:
+            clean_args["farm_id"] = farm_id
         return fn(**clean_args)
     except Exception as e:
         return {"status": "error", "message": f"Error executing '{function_name}': {str(e)}"}
