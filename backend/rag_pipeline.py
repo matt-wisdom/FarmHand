@@ -293,8 +293,11 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
 
     formatted_context_parts = []
     for i, c in enumerate(chunks, 1):
+        raw_text = (c.get('text') or '').strip()
+        if len(raw_text) > 600:
+            raw_text = raw_text[:600].rsplit(' ', 1)[0] + "..."
         formatted_context_parts.append(
-            f"--- Context Block {i} (Source: {c['filename']}) ---\n{c['text']}"
+            f"--- Context Block {i} (Source: {c['filename']}) ---\n{raw_text}"
         )
 
     joined_context = "\n\n".join(formatted_context_parts)

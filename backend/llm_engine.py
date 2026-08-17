@@ -29,7 +29,7 @@ MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
 
 # 2 physical CPU cores on Intel Core i7-7500U to maximize CPU throughput
-N_CTX = 2048
+N_CTX = 4096
 N_THREADS = 2
 
 # --- FIX A: minimum similarity score required to trust a RAG hit ---
@@ -270,6 +270,9 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
     else:
         language_rule = "Respond to the farmer ONLY in formal, standard international English. Do not use Pidgin or any other language."
 
+    # Budget context length to prevent exceeding token limits
+    safe_context = context_data[:2500].strip() if context_data else ""
+
     system_prompt = (
         "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
         f"{language_rule}\n\n"
@@ -286,12 +289,16 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Reference Context:\n{context_data}\n\nFarmer Question:\n{user_question}"}
+        {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
     ]
+
+    # Calculate token headroom dynamically
+    est_prompt_tokens = len(system_prompt + safe_context + user_question) // 3
+    max_gen_tokens = max(64, min(300, N_CTX - est_prompt_tokens - 100))
 
     response = llm.create_chat_completion(
         messages=messages,
-        max_tokens=300,
+        max_tokens=max_gen_tokens,
         temperature=0.1,
         logit_bias=_anti_json_logit_bias,
         stop=["<|im_end|>", "<|im_start|>"]
