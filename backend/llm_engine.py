@@ -24,6 +24,7 @@ N_CTX = 2048
 N_THREADS = 2
 
 _llm_instance: Optional[Llama] = None
+_anti_json_logit_bias: Optional[Dict[int, float]] = None
 
 
 def normalize_language(lang: Optional[str]) -> str:
@@ -40,7 +41,7 @@ def normalize_language(lang: Optional[str]) -> str:
 
 def get_llm() -> Optional[Llama]:
     """Lazy loader for llama.cpp model instance."""
-    global _llm_instance
+    global _llm_instance, _anti_json_logit_bias
     if _llm_instance is None:
         if MODEL_PATH.exists():
             print(f"[llm_engine] Loading llama.cpp model from {MODEL_PATH} (threads={N_THREADS}, ctx={N_CTX})...")
@@ -50,6 +51,10 @@ def get_llm() -> Optional[Llama]:
                 n_threads=N_THREADS,
                 verbose=False
             )
+            # Token bias against '[' and '{' to prevent default tool-calling syntax
+            sq_tokens = _llm_instance.tokenize(b'[')
+            cu_tokens = _llm_instance.tokenize(b'{')
+            _anti_json_logit_bias = {tok: -100.0 for tok in sq_tokens + cu_tokens}
         else:
             print(f"[llm_engine] Model file not found at {MODEL_PATH}")
             _llm_instance = None
@@ -59,6 +64,12 @@ def get_llm() -> Optional[Llama]:
 def convert_pidgin_to_clean_english(text: str) -> str:
     """Converts fine-tuned Nigerian Pidgin idioms into standard English for clean translation."""
     replacements = [
+        (r'\bna well-well\b', 'I understand'),
+        (r'\bna properly\b', 'I understand'),
+        (r'\bi go fit help you with\b', 'I can help you with'),
+        (r'\bi go fit help you\b', 'I can help you'),
+        (r'\bi go help you\b', 'I will help you'),
+        (r'\bi go check\b', 'I will check'),
         (r'\bi dey help you with\b', 'I can assist you with'),
         (r'\bi dey here to help you\b', 'I am here to assist you'),
         (r'\bi dey well-well\b', 'I am doing well'),
@@ -72,16 +83,23 @@ def convert_pidgin_to_clean_english(text: str) -> str:
         (r'\bdey show say\b', 'shows that'),
         (r'\bdey enter for pen\b', 'in the pen'),
         (r'\bdey recorded for\b', 'recorded in'),
+        (r'\bdey come from\b', 'comes from'),
+        (r'\bdey cause am\b', 'causes it'),
+        (r'\bdey cause\b', 'causes'),
         (r'\bwey dey\b', 'that is'),
         (r'\bna so\b', 'that is correct'),
         (r'\babeg\b', 'please'),
+        (r'\bwetin you see\b', 'regarding your observation'),
         (r'\bwetin\b', 'what'),
         (r'\byou fit\b', 'you can'),
         (r'\byou get\b', 'you have'),
+        (r'\byou suppose\b', 'you should'),
         (r'\bif you get\b', 'if you have'),
         (r'\bif dem dey\b', 'if they are'),
         (r'\bdem dey\b', 'they are'),
         (r'\bdem be\b', 'it may be'),
+        (r'\be go worse\b', 'it will get worse'),
+        (r'\be go\b', 'it will'),
         (r'\bdey worse\b', 'get worse'),
         (r'\bquick-quick\b', 'quickly'),
         (r'\be dey help\b', 'it helps'),
@@ -110,6 +128,7 @@ def is_conversational_greeting(query: str) -> bool:
         'kaji', 'kaza', 'awaki', 'akuya', 'shanu', 'saniya', 'tumaki',
         'cough', 'coughing', 'sneeze', 'sneezing', 'die', 'dying', 'dead', 'sick', 'sickness', 'disease',
         'fever', 'limp', 'limping', 'cuta', 'ciwo', 'tari', 'mura', 'zazzabi', 'magani',
+        'blister', 'blisters', 'scab', 'scabs', 'wound', 'wounds', 'pox', 'fungal', 'fungus',
         'feed', 'housing', 'pen', 'coop', 'vaccine', 'vaccination', 'egg', 'eggs', 'weight',
         'cost', 'expense', 'spent', 'buy', 'bought', 'naira', 'kudi', 'count', 'number'
     }
@@ -192,7 +211,7 @@ def chat_completion(
     thread_id: Optional[str] = None,
     language: str = "english"
 ) -> str:
-    """Unified single-pass chat completion for FarmHand AI."""
+    """Unified multi-turn chat completion for FarmHand AI."""
     turn_start = time.time()
     norm_lang = normalize_language(language)
     print(f"\n[llm_engine] --- Chat Turn Start | Farm: '{farm_id}' | Lang: '{norm_lang}' ---")
@@ -200,7 +219,7 @@ def chat_completion(
     user_prompts = [m.get("content", "").strip() for m in messages if m.get("role") == "user"]
     last_user_query = user_prompts[-1] if user_prompts else ""
 
-    # Step 1: Hausa -> English neural translation for inference
+    # Step 1: Hausa -> English translation of the latest user turn if needed
     effective_messages = []
     if norm_lang == "hausa":
         print(f"[llm_engine] Translating user input from Hausa to English: '{last_user_query}'")
@@ -223,59 +242,78 @@ def chat_completion(
         print(f"[llm_engine] --- Chat Turn End ---\n")
         return fast_ans
 
-    # Step 3: Fetch active farm profile to scope RAG search and advice
+    # Step 3: Fetch active farm profile
     farm = get_farm_by_id(farm_id)
     farm_species = farm["farm_type"] if farm and farm.get("farm_type") else "General"
     species_scope = farm_species if farm_species.lower() != "general" else ""
 
-    # Step 4: Dynamic RAG retrieval (< 0.05s) with species scope
+    # Step 4: Contextualized RAG retrieval (< 0.05s)
+    # Formulate search query using recent conversation turns if follow-up
     rag_context = ""
     if len(current_query_en) > 3:
-        search_query = f"{species_scope} {current_query_en}".strip() if species_scope else current_query_en
-        rag_hits = search_knowledge_base(search_query, top_k=2)
+        context_keywords = [m.get("content", "") for m in effective_messages[-3:] if m.get("role") == "user"]
+        combined_query = f"{species_scope} " + " ".join(context_keywords)
+        rag_hits = search_knowledge_base(combined_query.strip(), top_k=2)
         if rag_hits:
             snippets = [f"[{h.get('filename', 'Doc')}]: {h.get('text', '')[:300]}" for h in rag_hits]
             rag_context = "\n---\n".join(snippets)
-            print(f"[llm_engine] Retrieved {len(rag_hits)} RAG context chunks for '{search_query}'.")
+            print(f"[llm_engine] Retrieved {len(rag_hits)} RAG context chunks.")
 
-    # Step 5: Single-pass RAG synthesis
+    # Step 5: Load LLM with Logit Bias
     llm = get_llm()
     if llm is None:
         return "[Fallback] Model not loaded."
 
-    species_instruction = f"The active farm specializes in {farm_species}. Answer specifically for {farm_species} without asking the user what animals they have." if species_scope else "Answer the user's specific livestock or crop question directly."
+    knowledge_section = f"\nVETERINARY REFERENCE CONTEXT:\n{rag_context}\n" if rag_context.strip() else ""
+    species_rule = f"Active Farm: {farm.get('name', 'Farm')} ({farm_species}). Answer specifically for {farm_species}." if species_scope else "Answer the farming question directly."
 
-    prompt = (
-        "<|im_start|>system\n"
+    system_prompt = (
         "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
-        f"{species_instruction}\n"
-        "Provide practical, concise advice to the farmer based on the veterinary context below.\n\n"
-        f"VETERINARY REFERENCE CONTEXT:\n{rag_context}\n<|im_end|>\n"
-        f"<|im_start|>user\n{current_query_en}<|im_end|>\n"
-        "<|im_start|>assistant\n"
-        "To help address this on your farm, "
+        f"{species_rule}\n"
+        "Respond in clear, concise, professional English.\n"
+        "GUIDELINES:\n"
+        "- Answer the question directly and stay strictly on the topic asked.\n"
+        "- Do NOT change the subject or discuss unrelated diseases.\n"
+        "- Do NOT output random numbers, JSON brackets, or code."
+        f"{knowledge_section}"
     )
 
-    print(f"[llm_engine] Running single-pass inference...")
+    # Build ChatML prompt with multi-turn conversation history
+    prompt_parts = [f"<|im_start|>system\n{system_prompt}<|im_end|>"]
+    for m in effective_messages[-6:]:
+        role = m.get("role", "user")
+        content = m.get("content", "").strip()
+        if content:
+            prompt_parts.append(f"<|im_start|>{role}\n{content}<|im_end|>")
+    prompt_parts.append(f"<|im_start|>assistant\n")
+    full_prompt = "\n".join(prompt_parts)
+
+    print(f"[llm_engine] Running multi-turn inference...")
     gen_start = time.time()
     response = llm(
-        prompt,
-        max_tokens=150,
+        full_prompt,
+        max_tokens=160,
         temperature=0.2,
+        logit_bias=_anti_json_logit_bias,
         stop=["<|im_end|>", "<|im_start|>", "\n\nUser:", "Farmer:"]
     )
-    raw_output = "To help address this on your farm, " + response["choices"][0]["text"].strip()
+    raw_output = response["choices"][0]["text"].strip()
     gen_duration = time.time() - gen_start
     print(f"[llm_engine] Inference completed in {gen_duration:.2f}s | Output: {raw_output[:100]}...")
 
-    # Step 6: Clean output & translate if Hausa
-    final_output = raw_output
-    if norm_lang == "english":
-        final_output = convert_pidgin_to_clean_english(raw_output)
-    elif norm_lang == "hausa":
-        clean_en = convert_pidgin_to_clean_english(raw_output)
-        print(f"[llm_engine] Translating cleaned English response to Hausa...")
-        final_output = translate_en_to_ha(clean_en)
+    # Step 6: Post-process & Language formatting
+    final_output = convert_pidgin_to_clean_english(raw_output)
+
+    if norm_lang == "hausa":
+        print(f"[llm_engine] Translating cleaned response to Hausa...")
+        ha_translated = translate_en_to_ha(final_output)
+        # Check if MarianMT generated Tanzil/Biblical religious text artifacts
+        religious_artifacts = ["littafi mai tsarki", "ãdalci", "sikẽlin", "la'ĩmi", "al'ummai", "karin magana"]
+        if any(art in ha_translated.lower() for art in religious_artifacts):
+            print(f"[llm_engine] Detected MarianMT religious artifact in translation. Using clean advisory format.")
+            final_output = f"Shawarar FarmHand: {final_output}"
+        else:
+            final_output = ha_translated
 
     total_time = time.time() - turn_start
     print(f"[llm_engine] TOTAL TURN TIME: {total_time:.2f}s")
