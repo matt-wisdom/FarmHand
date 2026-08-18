@@ -284,47 +284,40 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
     """Pass 3: Natural language synthesis using strictly positive prompting and API Chat Wrapper."""
 
     # Budget context length to prevent exceeding token limits
-    safe_context = context_data[:2500].strip() if context_data else ""
+    safe_context = context_data[:2500].strip() if context_data else "No additional reference documents found."
 
     if norm_lang == "pidgin":
         system_prompt = (
             "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
-            "Respond to the farmer ONLY in warm, natural Nigerian Pidgin English.\n\n"
+            "Respond to the farmer ONLY in warm, natural Nigerian Pidgin English sentences.\n\n"
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
+            f"REFERENCE KNOWLEDGE BASE & MEMORY:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Answer based strictly on the Reference Context.\n"
-            "- State the exact facts, advice, or steps directly."
+            "- Answer the farmer directly, clearly, and concisely with actionable advice.\n"
+            "- If the knowledge base does not contain specific treatment or surgical instructions, state that detailed records are not available in your records, give safe first-aid and supportive care measures, and recommend calling a veterinarian immediately.\n"
+            "- NEVER use placeholder promises (e.g. do NOT say 'I will guide you' or 'Here are the steps to follow'). Provide your full advice immediately."
         )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
-        ]
     else:
         system_prompt = (
             "You are FarmHand AI, an expert agricultural and veterinary specialist.\n"
-            "Respond to the farmer in clear, professional, standard international English.\n\n"
+            "Respond to the farmer in clear, professional, standard international English sentences.\n\n"
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
+            f"REFERENCE KNOWLEDGE BASE & MEMORY:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Answer the farmer's question directly, clearly, and concisely based ONLY on facts present in the Reference Context.\n"
-            "- State specific clinical treatments, medications, active ingredients, dosage guidance, and management steps mentioned.\n"
+            "- Answer the farmer's question directly, clearly, and concisely with actionable advice.\n"
+            "- State specific treatments, medications, active ingredients, dosage guidance, and management steps when present in the reference context.\n"
+            "- If the reference context does NOT contain enough specific details for the condition, explicitly state that you do not have detailed records in your knowledge base, provide standard safe first-aid / supportive care measures, and advise consulting a licensed veterinarian.\n"
             "- Do NOT use Nigerian Pidgin, slang, or colloquial expressions.\n"
-            "- Do NOT ask conversational follow-up questions or delay your answer."
+            "- NEVER output placeholder promises (e.g. do NOT say 'I will guide you through the steps'). Provide your complete response immediately."
         )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": "Reference Context:\n- Treat tick infestations with approved acaricides (e.g. Amitraz spray or Cypermethrin dip).\n- Keep goat pens dry and well-ventilated.\n\nFarmer Question:\nHow do I manage ticks on my goats?"
-            },
-            {
-                "role": "assistant",
-                "content": "To manage ticks on goats, apply an approved acaricide spray or dipping solution such as Amitraz or Cypermethrin according to the manufacturer dosage. Inspect animals regularly and keep housing clean and dry to reduce tick exposure."
-            },
-            {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
-        ]
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_question}
+    ]
 
     # Calculate token headroom dynamically
-    est_prompt_tokens = len(system_prompt + safe_context + user_question) // 3
+    est_prompt_tokens = len(system_prompt + user_question) // 3
     max_gen_tokens = max(64, min(300, N_CTX - est_prompt_tokens - 100))
 
     bias = _english_logit_bias if norm_lang != "pidgin" else _anti_json_logit_bias
@@ -338,7 +331,8 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
         stop=["<|im_end|>", "<|im_start|>"]
     )
 
-    return response["choices"][0]["message"]["content"].strip()
+    content = response["choices"][0]["message"]["content"].strip()
+    return content
 
 
 def format_tool_direct_response(tool_name: str, result: dict, farm_id: str, language: str = "english") -> Optional[str]:
@@ -473,12 +467,14 @@ def chat_completion(
             "You are the tool routing engine for FarmHand AI.\n"
             "Output ONLY a valid JSON array with the single best tool call.\n\n"
             "TOOLS:\n"
-            "- list_animals(species: str, date_str: str): Check or ask for animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
+            "- list_animals(species: str, date_str: str): Check animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
             "- register_flock(species: str, count: int, event_type: str, notes: str): Set, record, or update animal headcount (e.g. 'I have 5 chickens', 'We currently have 9 goats', 'bought 10 cows', '2 birds died').\n"
             "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
             "- write_expenditure(category: str, amount: float, description: str): Record a new financial expense.\n"
-            "- log_farm_observation(species: str, observation: str, category: str): Record persistent long-term farm memory, infrastructure (e.g. floodlights, boreholes), equipment, housing, feeding routines, animal behaviors, or symptoms.\n"
-            "- query_knowledge_base(search_query: str): Ask about diseases, illness, symptoms, treatments, medication, vaccines, feeding, or farming advice.\n\n"
+            "- log_farm_observation(species: str, observation: str, category: str): Save persistent background setup memory about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing structure, or feeding routines. Use ONLY when the user states background facts about their farm setup.\n"
+            "- query_knowledge_base(search_query: str): Search veterinary manuals and agricultural knowledge base for diseases, illness, injuries, broken limbs/bones, symptoms, treatments, medications, dosage, first-aid, or farming guidance. Use whenever the farmer asks a question, reports an injury or health issue, or requests care procedures.\n\n"
+            "MULTI-TURN INSTRUCTION:\n"
+            "- In multi-turn conversations, use the recent dialogue context to resolve follow-ups and pronouns (e.g. 'ok?', 'how do I treat it?', 'what next?') into a complete standalone search_query describing the animal species and issue.\n\n"
             "SPECIES MAPPING:\n"
             "- chickens / hens / broilers / birds -> \"poultry\"\n"
             "- goats / kids / bucks -> \"goat\"\n"
@@ -493,10 +489,10 @@ def chat_completion(
             "Farmer: 'We currently have 9 goats' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"goat\", \"count\": 9, \"event_type\": \"initial_count\", \"notes\": \"\"}}]\n"
             "Farmer: 'I have 5 chickens' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": 5, \"event_type\": \"initial_count\", \"notes\": \"\"}}]\n"
             "Farmer: 'I bought 10 cows' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"cattle\", \"count\": 10, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
-            "Farmer: 'We bought 15 sheep' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"sheep\", \"count\": 15, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
             "Farmer: '3 chickens died today' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -3, \"event_type\": \"mortality\", \"notes\": \"\"}}]\n"
             "Farmer: 'I have a floodlight in the goat pen' -> [{\"function_name\": \"log_farm_observation\", \"arguments\": {\"species\": \"goat\", \"category\": \"infrastructure\", \"observation\": \"Has a floodlight installed in the goat pen\"}}]\n"
             "Farmer: 'We feed them corn bran and hay' -> [{\"function_name\": \"log_farm_observation\", \"arguments\": {\"species\": \"general\", \"category\": \"feeding\", \"observation\": \"Fed with corn bran and hay\"}}]\n"
+            "Farmer: 'One of my goat broke a leg and its limping' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat broken leg fracture first aid treatment\"}}]\n"
             "Farmer: 'my goat is moving weird' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat abnormal movement causes treatment\"}}]\n"
             "Farmer: 'what causes coughing in goats' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat coughing causes treatment\"}}]\n"
             "Farmer: 'What should i first do when i get a new chicken?' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"new chicken arrival care guidelines\"}}]\n"
@@ -538,6 +534,7 @@ def chat_completion(
     # Step 4: Execute Tools
     tool_results = []
     rag_context = ""
+    has_knowledge_rag = False
 
     if is_tool_call:
         for call in tool_calls:
@@ -549,6 +546,7 @@ def chat_completion(
 
             if fn_name == "query_knowledge_base" and isinstance(res, dict) and "context_prompt" in res:
                 rag_context = res["context_prompt"]
+                has_knowledge_rag = True
 
     if not is_tool_call and len(current_query_en) > 5:
         print("[llm_engine] Pass 1 yielded no tools, falling back to RAG safety net...")
@@ -559,6 +557,7 @@ def chat_completion(
             rag_context = "\n---\n".join(
                 [f"[{h.get('filename')}]: {h.get('text')[:250]}" for h in relevant_hits if len(h.get("text", "")) > 50]
             )
+            has_knowledge_rag = True
         else:
             print("[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise.")
 
@@ -574,11 +573,11 @@ def chat_completion(
         print(f"[llm_engine] Semantic memory retrieval notice: {e}")
 
     # Step 5: SYNTHESIS / RESULT DISPATCH
-    if is_tool_call:
+    if is_tool_call and not has_knowledge_rag:
         for call in tool_calls:
             fn_name = call["function_name"]
             tool_match = next((tr["result"] for tr in tool_results if tr["tool"] == fn_name), None)
-            if tool_match and fn_name in ("list_animals", "register_flock", "list_expenditures", "write_expenditure", "list_health_logs", "write_health_log", "log_farm_observation") and not rag_context:
+            if tool_match and fn_name in ("list_animals", "register_flock", "list_expenditures", "write_expenditure", "list_health_logs", "write_health_log", "log_farm_observation"):
                 db_direct_ans = format_tool_direct_response(fn_name, tool_match, farm_id=farm_id, language=norm_lang)
                 if db_direct_ans:
                     print(f"[llm_engine] Database tool '{fn_name}' direct response generated.")

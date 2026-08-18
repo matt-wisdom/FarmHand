@@ -233,13 +233,13 @@ TOOL_MAP = {
 TOOL_SCHEMAS = [
     {
         "name": "log_farm_observation",
-        "description": "Save persistent long-term farm memory or facts about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing, feeding routines, animal behaviors, or clinical observations. Use when the user states facts about their farm setup or reports animal health observations.",
+        "description": "Save persistent background farm memory or facts about farm infrastructure (e.g. floodlights, boreholes, solar panels), equipment (e.g. incubators, feeders, brooders), housing structure, feeding routines, or static farm attributes. Use ONLY when the user states background setup or facility facts about their farm.",
         "parameters": {
             "type": "object",
             "properties": {
                 "species": {"type": "string", "description": "Specific species ('goat', 'poultry', 'cattle') or 'general' if whole farm"},
-                "observation": {"type": "string", "description": "The exact fact, equipment, setup, or observation to remember"},
-                "category": {"type": "string", "description": "Category: infrastructure, equipment, housing, feeding, symptom, treatment, general"}
+                "observation": {"type": "string", "description": "The exact fact, equipment, or setup to remember"},
+                "category": {"type": "string", "description": "Category: infrastructure, equipment, housing, feeding, general"}
             },
             "required": ["species", "observation"]
         }
@@ -354,11 +354,11 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "query_knowledge_base",
-        "description": "Search farm manuals and PDF knowledge base for information.",
+        "description": "Search veterinary manuals and agricultural knowledge base for diseases, injuries, broken limbs/bones, symptoms, clinical treatments, medications, dosage, first-aid, and general farming guidance. Use whenever the user asks a question, reports an illness or injury, or requests care procedures.",
         "parameters": {
             "type": "object",
             "properties": {
-                "search_query": {"type": "string", "description": "Natural language search query for knowledge retrieval"}
+                "search_query": {"type": "string", "description": "Detailed standalone search query describing the animal species, condition, and advice needed"}
             },
             "required": ["search_query"]
         }
