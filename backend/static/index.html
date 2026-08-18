@@ -319,7 +319,7 @@
             <div>
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <h2 class="section-heading" style="margin-bottom: 0;">{{ activeFarm?.name }} Overview</h2>
-                <span class="badge badge-blue">{{ activeFarm?.farm_type || 'General' }}</span>
+                <span style="font-size: 0.88rem; color: var(--text-muted);">({{ activeFarm?.farm_type || 'General' }})</span>
               </div>
               <div style="font-size: 0.86rem; color: var(--text-muted); margin-top: 4px;" v-if="activeFarm?.description">
                 {{ activeFarm.description }}
@@ -347,7 +347,6 @@
             <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view Flock Ledger">
               <div class="stat-tile-top">
                 <span class="stat-tile-lbl">Flock & Herd Size</span>
-                <span class="badge badge-blue">Ledger</span>
               </div>
               <div class="stat-tile-val">{{ totalFlockSize }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">heads</span></div>
               <div class="stat-tile-sub">
@@ -362,13 +361,6 @@
             <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view health scan">
               <div class="stat-tile-top">
                 <span class="stat-tile-lbl">Health & Anomaly</span>
-                <span class="badge" :class="{
-                  'badge-rose': latestAnomaly?.severity === 'CRITICAL',
-                  'badge-amber': latestAnomaly?.severity === 'WARNING',
-                  'badge-green': !latestAnomaly || latestAnomaly?.severity === 'NORMAL'
-                }">
-                  {{ latestAnomaly?.severity || 'NORMAL' }}
-                </span>
               </div>
               <div class="stat-tile-val" :style="{
                 color: latestAnomaly?.severity === 'CRITICAL' ? 'var(--accent-rose)' : (latestAnomaly?.severity === 'WARNING' ? 'var(--accent-amber)' : 'var(--accent-green)')
@@ -382,7 +374,6 @@
             <div class="stat-tile" @click="switchTab('expenditures')" style="cursor: pointer;" title="Click to view Expenditures">
               <div class="stat-tile-top">
                 <span class="stat-tile-lbl">Total Spending</span>
-                <span class="badge badge-green">Finance</span>
               </div>
               <div class="stat-tile-val">NGN {{ totalExpenditures.toLocaleString() }}</div>
               <div class="stat-tile-sub">{{ expenditures.length }} recorded entries</div>
@@ -392,7 +383,6 @@
             <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view Farm Observations">
               <div class="stat-tile-top">
                 <span class="stat-tile-lbl">Farm Memory</span>
-                <span class="badge badge-blue">Knowledge</span>
               </div>
               <div class="stat-tile-val">{{ activeMemoriesCount }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">active</span></div>
               <div class="stat-tile-sub">{{ farmMemories.length }} total observations & facts</div>
@@ -423,11 +413,10 @@
                       <td><code style="font-size: 0.76rem;">{{ (entry.created_at || '').slice(5, 16) }}</code></td>
                       <td><strong>{{ entry.species }}</strong></td>
                       <td>
-                        <span class="badge" :class="{
-                          'badge-green': entry.event_type === 'purchase',
-                          'badge-rose': entry.event_type === 'mortality',
-                          'badge-amber': entry.event_type === 'sale',
-                          'badge-blue': entry.event_type === 'initial_count' || entry.event_type === 'count_update'
+                        <span :style="{
+                          color: entry.event_type === 'mortality' ? 'var(--accent-rose)' : (entry.event_type === 'purchase' ? 'var(--accent-green)' : (entry.event_type === 'sale' ? 'var(--accent-amber)' : 'var(--text-main)')),
+                          fontWeight: '600',
+                          fontSize: '0.82rem'
                         }">
                           {{ entry.event_type }}
                         </span>
@@ -463,7 +452,7 @@
                   </thead>
                   <tbody>
                     <tr v-for="e in expenditures.slice(0, 5)" :key="e.id">
-                      <td><span class="badge badge-green">{{ e.category }}</span></td>
+                      <td><span style="font-weight: 600; font-size: 0.82rem; text-transform: capitalize;">{{ e.category }}</span></td>
                       <td><strong>NGN {{ (e.amount || 0).toLocaleString() }}</strong></td>
                       <td style="color: var(--text-muted); font-size: 0.82rem;">{{ e.description || '—' }}</td>
                       <td><code style="font-size: 0.76rem;">{{ (e.timestamp || '').slice(5, 16) }}</code></td>
