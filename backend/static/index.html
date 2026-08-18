@@ -1064,9 +1064,20 @@
         const isMobileSidebarOpen = ref(false);
         const toasts = ref([]);
 
-        // Multi-Farm State
+        // Multi-Farm State with URL parameter & localStorage persistence
+        const getSavedFarmId = () => {
+          try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlFarm = urlParams.get('farm');
+            if (urlFarm) return urlFarm;
+            const stored = localStorage.getItem('farmhand_active_farm_id');
+            if (stored) return stored;
+          } catch (e) {}
+          return '';
+        };
+
         const farms = ref([]);
-        const activeFarmId = ref('default_farm');
+        const activeFarmId = ref(getSavedFarmId() || 'default_farm');
         const showFarmDropdown = ref(false);
         const showFarmModal = ref(false);
         const isEditingFarm = ref(false);
@@ -1276,14 +1287,30 @@
           }, 3200);
         };
 
+        const syncUrlParams = (threadId) => {
+          try {
+            const url = new URL(window.location);
+            if (activeFarmId.value) {
+              url.searchParams.set('farm', activeFarmId.value);
+            }
+            if (threadId) {
+              url.searchParams.set('thread', threadId);
+            }
+            window.history.pushState({ farmId: activeFarmId.value, threadId }, '', url);
+          } catch (e) {}
+        };
+
         const fetchFarms = async () => {
           try {
             const res = await fetch('/farms');
             if (res.ok) {
               const data = await res.json();
               farms.value = data.farms || [];
-              if (farms.value.length > 0 && (!activeFarmId.value || !farms.value.some(f => f.id === activeFarmId.value))) {
-                activeFarmId.value = farms.value[0].id;
+              if (farms.value.length > 0) {
+                const savedId = getSavedFarmId();
+                const matched = farms.value.find(f => f.id === savedId);
+                activeFarmId.value = matched ? matched.id : farms.value[0].id;
+                localStorage.setItem('farmhand_active_farm_id', activeFarmId.value);
               }
             }
           } catch (e) {
@@ -1572,9 +1599,7 @@
           currentTab.value = 'assistant';
           closeMobileSidebar();
           if (updateUrl) {
-            const url = new URL(window.location);
-            url.searchParams.set('thread', threadId);
-            window.history.pushState({ threadId }, '', url);
+            syncUrlParams(threadId);
           }
           try {
             const res = await fetch(`/threads/${threadId}`);
@@ -1798,11 +1823,23 @@
             await createNewThread();
           }
 
-          window.addEventListener('popstate', (e) => {
+          // Keep initial URL cleanly synchronized with active farm & thread
+          syncUrlParams(activeThreadId.value);
+
+          window.addEventListener('popstate', async (e) => {
             const params = new URLSearchParams(window.location.search);
-            const tId = params.get('thread') || params.get('session');
-            if (tId && tId !== activeThreadId.value && threads.value.some(t => t.id === tId)) {
-              selectThread(tId, false);
+            const farmParam = params.get('farm');
+            const threadParam = params.get('thread') || params.get('session');
+
+            if (farmParam && farmParam !== activeFarmId.value && farms.value.some(f => f.id === farmParam)) {
+              activeFarmId.value = farmParam;
+              localStorage.setItem('farmhand_active_farm_id', farmParam);
+              await fetchThreads();
+              await fetchDashboardData();
+            }
+
+            if (threadParam && threadParam !== activeThreadId.value && threads.value.some(t => t.id === threadParam)) {
+              await selectThread(threadParam, false);
             }
           });
 
