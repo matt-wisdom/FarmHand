@@ -320,6 +320,40 @@ def get_all_expenditures(farm_id: str = "default_farm", db_path: Path = DB_PATH)
         return [dict(r) for r in cursor.fetchall()]
 
 
+def record_expenditure(
+    farm_id: str,
+    category: str,
+    amount: float,
+    description: str = "",
+    db_path: Path = DB_PATH
+) -> Dict[str, Any]:
+    """Records a new operational or financial expenditure."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO expenditures (farm_id, category, amount, description) VALUES (?, ?, ?, ?)",
+            (farm_id, category.strip().lower(), float(amount), description.strip())
+        )
+        exp_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM expenditures WHERE id = ?", (exp_id,))
+        return dict(cursor.fetchone())
+
+
+def get_telemetry_data(
+    farm_id: str = "default_farm",
+    limit: int = 50,
+    db_path: Path = DB_PATH
+) -> List[Dict[str, Any]]:
+    """Retrieves recent IoT sensor readings for a farm."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM telemetry_data WHERE farm_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (farm_id, limit)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+
 def get_all_health_logs(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> List[Dict[str, Any]]:
     with get_db_connection(db_path) as conn:
         cursor = conn.cursor()

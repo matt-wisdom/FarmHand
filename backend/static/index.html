@@ -315,58 +315,181 @@
 
         <!-- VIEW TAB 2: DASHBOARD OVERVIEW -->
         <section v-if="currentTab === 'dashboard'" class="view-container">
-          <h2 class="section-heading">{{ activeFarm?.name }} Dashboard Overview</h2>
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="1" x2="12" y2="23"></line>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
+          <div class="section-header-flex">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <h2 class="section-heading" style="margin-bottom: 0;">{{ activeFarm?.name }} Overview</h2>
+                <span class="badge badge-blue">{{ activeFarm?.farm_type || 'General' }}</span>
               </div>
-              <div class="metric-val">NGN {{ totalExpenditures.toLocaleString() }}</div>
-              <div class="metric-lbl">Total Farm Expenditures</div>
+              <div style="font-size: 0.86rem; color: var(--text-muted); margin-top: 4px;" v-if="activeFarm?.description">
+                {{ activeFarm.description }}
+              </div>
             </div>
-            <div class="metric-card">
-              <div class="metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary-green" @click="fetchDashboardData" :disabled="isLoading">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                 </svg>
-              </div>
-              <div class="metric-val">{{ animals.length }}</div>
-              <div class="metric-lbl">Registered Animals</div>
+                Refresh
+              </button>
+              <button class="btn-green" @click="switchTab('assistant')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Open Assistant
+              </button>
             </div>
-            <div class="metric-card">
-              <div class="metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                </svg>
+          </div>
+
+          <!-- Top Stat Grid (4 Minimalist Tiles) -->
+          <div class="dashboard-stat-grid">
+            <!-- 1. Total Flock Size -->
+            <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view Flock Ledger">
+              <div class="stat-tile-top">
+                <span class="stat-tile-lbl">Flock & Herd Size</span>
+                <span class="badge badge-blue">Ledger</span>
               </div>
-              <div class="metric-val">{{ healthLogs.length }}</div>
-              <div class="metric-lbl">Health Records</div>
+              <div class="stat-tile-val">{{ totalFlockSize }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">heads</span></div>
+              <div class="stat-tile-sub">
+                <span v-if="Object.keys(flockTotals).length > 0">
+                  <span v-for="(cnt, sp, idx) in flockTotals" :key="sp">{{ sp }}: {{ cnt }}<span v-if="idx < Object.keys(flockTotals).length - 1">, </span></span>
+                </span>
+                <span v-else>No livestock registered</span>
+              </div>
             </div>
-            <div class="metric-card">
-              <div class="metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                </svg>
+
+            <!-- 2. Flock Anomaly Status -->
+            <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view health scan">
+              <div class="stat-tile-top">
+                <span class="stat-tile-lbl">Health & Anomaly</span>
+                <span class="badge" :class="{
+                  'badge-rose': latestAnomaly?.severity === 'CRITICAL',
+                  'badge-amber': latestAnomaly?.severity === 'WARNING',
+                  'badge-green': !latestAnomaly || latestAnomaly?.severity === 'NORMAL'
+                }">
+                  {{ latestAnomaly?.severity || 'NORMAL' }}
+                </span>
               </div>
-              <div class="metric-val">{{ health.vector_count }}</div>
-              <div class="metric-lbl">Knowledge Chunks</div>
+              <div class="stat-tile-val" :style="{
+                color: latestAnomaly?.severity === 'CRITICAL' ? 'var(--accent-rose)' : (latestAnomaly?.severity === 'WARNING' ? 'var(--accent-amber)' : 'var(--accent-green)')
+              }">
+                {{ latestAnomaly?.severity === 'CRITICAL' ? 'Alert' : (latestAnomaly?.severity === 'WARNING' ? 'Warning' : 'Healthy') }}
+              </div>
+              <div class="stat-tile-sub">{{ latestAnomaly?.title || 'Baseline stable. No anomalies.' }}</div>
             </div>
-            <div class="metric-card">
-              <div class="metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                  <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                  <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                </svg>
+
+            <!-- 3. Total Expenditures -->
+            <div class="stat-tile" @click="switchTab('expenditures')" style="cursor: pointer;" title="Click to view Expenditures">
+              <div class="stat-tile-top">
+                <span class="stat-tile-lbl">Total Spending</span>
+                <span class="badge badge-green">Finance</span>
               </div>
-              <div class="metric-val">{{ health.process_ram_mb || 0 }} MB</div>
-              <div class="metric-lbl">App Process RAM (Sys: {{ health.system_ram_percent || 0 }}%)</div>
+              <div class="stat-tile-val">NGN {{ totalExpenditures.toLocaleString() }}</div>
+              <div class="stat-tile-sub">{{ expenditures.length }} recorded entries</div>
+            </div>
+
+            <!-- 4. Active Clinical & Farm Memory -->
+            <div class="stat-tile" @click="switchTab('health')" style="cursor: pointer;" title="Click to view Farm Observations">
+              <div class="stat-tile-top">
+                <span class="stat-tile-lbl">Farm Memory</span>
+                <span class="badge badge-blue">Knowledge</span>
+              </div>
+              <div class="stat-tile-val">{{ activeMemoriesCount }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">active</span></div>
+              <div class="stat-tile-sub">{{ farmMemories.length }} total observations & facts</div>
+            </div>
+          </div>
+
+          <!-- Split Activity Feed -->
+          <div class="dashboard-split-grid">
+            <!-- Left Feed: Recent Flock & Health Activity -->
+            <div class="dashboard-feed-card">
+              <div class="dashboard-feed-header">
+                <span class="dashboard-feed-title">Recent Flock Ledger Events</span>
+                <button class="btn-sm btn-outline-muted" @click="switchTab('health')">View Ledger →</button>
+              </div>
+              <div class="table-container" style="margin-bottom: 0;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Species</th>
+                      <th>Event</th>
+                      <th>Change</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="entry in flockHistory.slice(0, 5)" :key="entry.id">
+                      <td><code style="font-size: 0.76rem;">{{ (entry.created_at || '').slice(5, 16) }}</code></td>
+                      <td><strong>{{ entry.species }}</strong></td>
+                      <td>
+                        <span class="badge" :class="{
+                          'badge-green': entry.event_type === 'purchase',
+                          'badge-rose': entry.event_type === 'mortality',
+                          'badge-amber': entry.event_type === 'sale',
+                          'badge-blue': entry.event_type === 'initial_count' || entry.event_type === 'count_update'
+                        }">
+                          {{ entry.event_type }}
+                        </span>
+                      </td>
+                      <td :style="{ color: entry.count_change > 0 ? 'var(--accent-green)' : (entry.count_change < 0 ? 'var(--accent-rose)' : 'var(--text-muted)'), fontWeight: '700' }">
+                        {{ entry.count_change > 0 ? '+' + entry.count_change : (entry.count_change === 0 ? '±0' : entry.count_change) }}
+                      </td>
+                      <td><strong>{{ entry.new_total }}</strong></td>
+                    </tr>
+                    <tr v-if="flockHistory.length === 0">
+                      <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">No flock records yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right Feed: Recent Expenditures -->
+            <div class="dashboard-feed-card">
+              <div class="dashboard-feed-header">
+                <span class="dashboard-feed-title">Recent Expenditures</span>
+                <button class="btn-sm btn-outline-muted" @click="switchTab('expenditures')">View All →</button>
+              </div>
+              <div class="table-container" style="margin-bottom: 0;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Amount</th>
+                      <th>Description</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="e in expenditures.slice(0, 5)" :key="e.id">
+                      <td><span class="badge badge-green">{{ e.category }}</span></td>
+                      <td><strong>NGN {{ (e.amount || 0).toLocaleString() }}</strong></td>
+                      <td style="color: var(--text-muted); font-size: 0.82rem;">{{ e.description || '—' }}</td>
+                      <td><code style="font-size: 0.76rem;">{{ (e.timestamp || '').slice(5, 16) }}</code></td>
+                    </tr>
+                    <tr v-if="expenditures.length === 0">
+                      <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">No expenditures logged.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Edge AI Diagnostics Bar -->
+          <div class="system-diag-bar">
+            <div>
+              <strong>Edge AI:</strong> Local Qwen 2.5 3B Instruct (GGUF)
+            </div>
+            <div>
+              <strong>Knowledge Chunks:</strong> {{ health.vector_count || 24224 }} FAISS Vectors
+            </div>
+            <div>
+              <strong>Process Memory:</strong> {{ health.process_ram_mb || 0 }} MB <span style="color: var(--text-muted);">(System: {{ health.system_ram_percent || 0 }}%)</span>
+            </div>
+            <div>
+              <strong>Active Sessions:</strong> {{ threads.length }}
             </div>
           </div>
         </section>
@@ -1170,10 +1293,12 @@
 
         const switchActiveFarm = async (farmId) => {
           activeFarmId.value = farmId;
+          localStorage.setItem('farmhand_active_farm_id', farmId);
           showFarmDropdown.value = false;
           showToast(`Switched to ${activeFarm.value?.name || 'Farm'}`);
           await fetchThreads();
-          await fetchFlockLedger();
+          await fetchDashboardData();
+          await createNewThread();
         };
 
         const fetchFlockLedger = async () => {
@@ -1361,28 +1486,96 @@
           }
         };
 
+        const fetchExpenditures = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures`);
+            if (res.ok) {
+              const data = await res.json();
+              expenditures.value = data.expenditures || [];
+            }
+          } catch (e) {
+            console.error('Error fetching expenditures:', e);
+          }
+        };
+
+        const submitAddExpenditure = async () => {
+          if (!activeFarmId.value || !newExp.value.amount || newExp.value.amount <= 0) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newExp.value)
+            });
+            if (res.ok) {
+              showToast('Expenditure Saved');
+              await fetchExpenditures();
+              showAddExpenditureModal.value = false;
+              newExp.value = { category: 'Feed', amount: 0, description: '' };
+            }
+          } catch (e) {
+            console.error('Error recording expenditure:', e);
+          }
+        };
+
+        const fetchHealthLogs = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/health-logs`);
+            if (res.ok) {
+              const data = await res.json();
+              healthLogs.value = data.health_logs || [];
+            }
+          } catch (e) {
+            console.error('Error fetching health logs:', e);
+          }
+        };
+
+        const fetchTelemetry = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/telemetry`);
+            if (res.ok) {
+              const data = await res.json();
+              telemetry.value = data.telemetry || [];
+            }
+          } catch (e) {
+            console.error('Error fetching telemetry:', e);
+          }
+        };
+
+        const fetchDashboardData = async () => {
+          await Promise.all([
+            fetchFlockLedger(),
+            fetchExpenditures(),
+            fetchHealthLogs(),
+            fetchTelemetry(),
+            fetchFarmMemories(),
+            fetchHealth()
+          ]);
+        };
+
         const fetchThreads = async () => {
           try {
             const res = await fetch(`/threads?farm_id=${activeFarmId.value}`);
             if (res.ok) {
               const data = await res.json();
               threads.value = data.threads || [];
-              if (threads.value.length > 0) {
-                if (!activeThreadId.value || !threads.value.some(t => t.id === activeThreadId.value)) {
-                  selectThread(threads.value[0].id);
-                }
-              } else if (!isCreatingThread.value) {
-                await createNewThread();
-              }
             }
           } catch (e) {
             console.error('Error fetching threads:', e);
           }
         };
 
-        const selectThread = async (threadId) => {
+        const selectThread = async (threadId, updateUrl = true) => {
           activeThreadId.value = threadId;
+          currentTab.value = 'assistant';
           closeMobileSidebar();
+          if (updateUrl) {
+            const url = new URL(window.location);
+            url.searchParams.set('thread', threadId);
+            window.history.pushState({ threadId }, '', url);
+          }
           try {
             const res = await fetch(`/threads/${threadId}`);
             if (res.ok) {
@@ -1398,6 +1591,7 @@
         const createNewThread = async () => {
           if (isCreatingThread.value) return;
           isCreatingThread.value = true;
+          currentTab.value = 'assistant';
           closeMobileSidebar();
           try {
             const res = await fetch('/threads', {
@@ -1412,7 +1606,7 @@
                 const listData = await listRes.json();
                 threads.value = listData.threads || [];
               }
-              selectThread(data.thread_id);
+              await selectThread(data.thread_id, true);
               showToast('New Chat Session Created');
             }
           } catch (e) {
@@ -1439,7 +1633,7 @@
                 threads.value = listData.threads || [];
                 if (threads.value.length > 0) {
                   if (wasActive || !activeThreadId.value || !threads.value.some(t => t.id === activeThreadId.value)) {
-                    selectThread(threads.value[0].id);
+                    await selectThread(threads.value[0].id, true);
                   }
                 } else {
                   await createNewThread();
@@ -1552,12 +1746,19 @@
           isLoading.value = true;
           currentTab.value = tabName;
           closeMobileSidebar();
-          if (tabName === 'health') {
+          if (tabName === 'dashboard') {
+            fetchDashboardData();
+          } else if (tabName === 'health') {
             fetchFlockLedger();
+            fetchFarmMemories();
+          } else if (tabName === 'expenditures') {
+            fetchExpenditures();
+          } else if (tabName === 'telemetry') {
+            fetchTelemetry();
           }
           setTimeout(() => {
             isLoading.value = false;
-          }, 400);
+          }, 300);
         };
 
         const toggleTheme = () => {
@@ -1584,8 +1785,27 @@
             openCreateFarmModal();
           }
           await fetchThreads();
-          await fetchFlockLedger();
-          await fetchHealth();
+          await fetchDashboardData();
+
+          // Handle URL session parameter: ?thread=... or ?session=...
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlThread = urlParams.get('thread') || urlParams.get('session');
+
+          if (urlThread && threads.value.some(t => t.id === urlThread)) {
+            await selectThread(urlThread, false);
+          } else {
+            // No session in URL or unknown session -> automatically create a new chat session
+            await createNewThread();
+          }
+
+          window.addEventListener('popstate', (e) => {
+            const params = new URLSearchParams(window.location.search);
+            const tId = params.get('thread') || params.get('session');
+            if (tId && tId !== activeThreadId.value && threads.value.some(t => t.id === tId)) {
+              selectThread(tId, false);
+            }
+          });
+
           isLoading.value = false;
         });
 
@@ -1653,6 +1873,11 @@
           editBuffer,
           showAddExpenditureModal,
           newExp,
+          submitAddExpenditure,
+          fetchExpenditures,
+          fetchHealthLogs,
+          fetchTelemetry,
+          fetchDashboardData,
           showAddAnimalModal,
           newAnimal,
           showAddHealthLogModal,

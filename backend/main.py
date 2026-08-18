@@ -18,7 +18,10 @@ from database import (
     delete_farm,
     get_all_animals,
     get_all_expenditures,
+    record_expenditure,
     get_all_health_logs,
+    record_health_log,
+    get_telemetry_data,
     get_chat_threads,
     get_current_flock_totals,
     get_farm_by_id,
@@ -176,6 +179,12 @@ class FarmMemoryRequest(BaseModel):
     species: str = Field("General", description="Species observed")
     category: str = Field("symptom", description="Category: symptom, behavior, treatment, feeding, general")
     observation: str = Field(..., description="Clinical or behavioral observation description")
+
+
+class ExpenditureRequest(BaseModel):
+    category: str = Field("feed", description="Category of expenditure (e.g. feed, veterinary, equipment, operations)")
+    amount: float = Field(..., gt=0, description="Amount spent in NGN")
+    description: Optional[str] = Field("", description="Description of the expenditure")
 
 
 # -------------------------------------------------------------------
@@ -351,6 +360,64 @@ def delete_farm_memory_endpoint(farm_id: str, memory_id: int):
     if not ok:
         raise HTTPException(status_code=404, detail="Memory record not found")
     return {"status": "success", "message": f"Memory {memory_id} deleted"}
+
+
+# -------------------------------------------------------------------
+# Operational Data Endpoints (Expenditures, Health Logs, Telemetry)
+# -------------------------------------------------------------------
+
+@app.get("/api/farms/{farm_id}/expenditures", tags=["Expenditures"])
+def get_farm_expenditures_endpoint(farm_id: str):
+    """GET /api/farms/{farm_id}/expenditures: Returns recorded expenditures for the farm."""
+    records = get_all_expenditures(farm_id=farm_id)
+    total_amount = sum(r.get("amount", 0) for r in records)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "count": len(records),
+        "total_amount": total_amount,
+        "expenditures": records
+    }
+
+
+@app.post("/api/farms/{farm_id}/expenditures", tags=["Expenditures"])
+def create_farm_expenditure_endpoint(farm_id: str, payload: ExpenditureRequest):
+    """POST /api/farms/{farm_id}/expenditures: Log a new expenditure."""
+    rec = record_expenditure(
+        farm_id=farm_id,
+        category=payload.category,
+        amount=payload.amount,
+        description=payload.description or ""
+    )
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "expenditure": rec
+    }
+
+
+@app.get("/api/farms/{farm_id}/health-logs", tags=["Health Records"])
+def get_farm_health_logs_endpoint(farm_id: str):
+    """GET /api/farms/{farm_id}/health-logs: Returns animal medical & health check records."""
+    logs = get_all_health_logs(farm_id=farm_id)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "count": len(logs),
+        "health_logs": logs
+    }
+
+
+@app.get("/api/farms/{farm_id}/telemetry", tags=["IoT Telemetry"])
+def get_farm_telemetry_endpoint(farm_id: str):
+    """GET /api/farms/{farm_id}/telemetry: Returns recent IoT sensor readings."""
+    data = get_telemetry_data(farm_id=farm_id, limit=50)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "count": len(data),
+        "telemetry": data
+    }
 
 
 # -------------------------------------------------------------------
