@@ -477,7 +477,7 @@ def chat_completion(
             "- register_flock(species: str, count: int, event_type: str, notes: str): Set, record, or update animal headcount (e.g. 'I have 5 chickens', 'We currently have 9 goats', 'bought 10 cows', '2 birds died').\n"
             "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
             "- write_expenditure(category: str, amount: float, description: str): Record a new financial expense.\n"
-            "- log_farm_observation(species: str, observation: str, category: str): Record an observed physical symptom, abnormal movement, disease sign, or medication into farm memory.\n"
+            "- log_farm_observation(species: str, observation: str, category: str): Record persistent long-term farm memory, infrastructure (e.g. floodlights, boreholes), equipment, housing, feeding routines, animal behaviors, or symptoms.\n"
             "- query_knowledge_base(search_query: str): Ask about diseases, illness, symptoms, treatments, medication, vaccines, feeding, or farming advice.\n\n"
             "SPECIES MAPPING:\n"
             "- chickens / hens / broilers / birds -> \"poultry\"\n"
@@ -495,7 +495,9 @@ def chat_completion(
             "Farmer: 'I bought 10 cows' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"cattle\", \"count\": 10, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
             "Farmer: 'We bought 15 sheep' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"sheep\", \"count\": 15, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
             "Farmer: '3 chickens died today' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -3, \"event_type\": \"mortality\", \"notes\": \"\"}}]\n"
-            "Farmer: 'my goat is moving weird' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat abnormal movement causes\"}}]\n"
+            "Farmer: 'I have a floodlight in the goat pen' -> [{\"function_name\": \"log_farm_observation\", \"arguments\": {\"species\": \"goat\", \"category\": \"infrastructure\", \"observation\": \"Has a floodlight installed in the goat pen\"}}]\n"
+            "Farmer: 'We feed them corn bran and hay' -> [{\"function_name\": \"log_farm_observation\", \"arguments\": {\"species\": \"general\", \"category\": \"feeding\", \"observation\": \"Fed with corn bran and hay\"}}]\n"
+            "Farmer: 'my goat is moving weird' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat abnormal movement causes treatment\"}}]\n"
             "Farmer: 'what causes coughing in goats' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat coughing causes treatment\"}}]\n"
             "Farmer: 'What should i first do when i get a new chicken?' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"new chicken arrival care guidelines\"}}]\n"
             "Farmer: 'how much have i spent this month' -> [{\"function_name\": \"list_expenditures\", \"arguments\": {}}]"
@@ -536,7 +538,6 @@ def chat_completion(
     # Step 4: Execute Tools
     tool_results = []
     rag_context = ""
-    logged_mem_in_tools = False
 
     if is_tool_call:
         for call in tool_calls:
@@ -546,32 +547,8 @@ def chat_completion(
             res = execute_tool(fn_name, fn_args, farm_id=farm_id)
             tool_results.append({"tool": fn_name, "result": res})
 
-            if fn_name == "log_farm_observation":
-                logged_mem_in_tools = True
-
             if fn_name == "query_knowledge_base" and isinstance(res, dict) and "context_prompt" in res:
                 rag_context = res["context_prompt"]
-
-    # Auto-log clinical observations if user reported physical/behavioral symptoms and not logged yet
-    symptom_triggers = ["moving weird", "walk funny", "limp", "cough", "sneeze", "not eating", "refus", "swoll", "diarrhea", "bloody", "blister", "discharge", "lesion", "fever", "pale eye", "paraly", "trembl", "tick", "flea", "worm"]
-    q_lower = current_query_en.lower()
-    if not logged_mem_in_tools and any(st in q_lower for st in symptom_triggers):
-        matched_sp = "General"
-        for sp_k, sp_v in [("goat", "Goat"), ("poultry", "Poultry"), ("chicken", "Poultry"), ("bird", "Poultry"), ("cattle", "Cattle"), ("cow", "Cattle"), ("bull", "Cattle"), ("sheep", "Sheep"), ("ram", "Sheep"), ("pig", "Pig")]:
-            if sp_k in q_lower:
-                matched_sp = sp_v
-                break
-        try:
-            import farm_memory
-            farm_memory.log_and_embed_observation(
-                farm_id=farm_id,
-                species=matched_sp,
-                category="symptom",
-                observation=last_user_query,
-                source="chat_inferred"
-            )
-        except Exception as e:
-            print(f"[llm_engine] Auto-log observation notice: {e}")
 
     if not is_tool_call and len(current_query_en) > 5:
         print("[llm_engine] Pass 1 yielded no tools, falling back to RAG safety net...")

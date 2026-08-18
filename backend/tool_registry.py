@@ -233,13 +233,13 @@ TOOL_MAP = {
 TOOL_SCHEMAS = [
     {
         "name": "log_farm_observation",
-        "description": "Log an observational clinical symptom, behavioral anomaly, disease observation, or medication into persistent farm memory. Use when the user reports physical symptoms (e.g. limping, coughing, moving weird, not eating), health issues, or treatments.",
+        "description": "Save persistent long-term farm memory or facts about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing, feeding routines, animal behaviors, or clinical observations. Use when the user states facts about their farm setup or reports animal health observations.",
         "parameters": {
             "type": "object",
             "properties": {
-                "species": {"type": "string", "description": "Species observed (e.g. goat, poultry, cattle, sheep)"},
-                "observation": {"type": "string", "description": "Clinical or behavioral observation description"},
-                "category": {"type": "string", "description": "Category: symptom, behavior, treatment, feeding, general"}
+                "species": {"type": "string", "description": "Specific species ('goat', 'poultry', 'cattle') or 'general' if whole farm"},
+                "observation": {"type": "string", "description": "The exact fact, equipment, setup, or observation to remember"},
+                "category": {"type": "string", "description": "Category: infrastructure, equipment, housing, feeding, symptom, treatment, general"}
             },
             "required": ["species", "observation"]
         }

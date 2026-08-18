@@ -77,7 +77,7 @@ def log_and_embed_observation(
     Embeds a clinical observation or symptom, persists to farm_memories,
     and cross-records to health_logs.
     """
-    text_to_embed = f"{species} {category}: {observation}"
+    text_to_embed = observation.strip()
     emb = embed_text(text_to_embed)
 
     # Persist structured memory
@@ -136,27 +136,17 @@ def search_farm_memories(
         m_sp = (mem.get("species") or "").lower()
         m_cat = (mem.get("category") or "").lower()
 
-        # 1. Vector similarity score
+        # Pure dense vector similarity score
         v_score = cosine_similarity(q_emb, m_emb) if q_emb and m_emb else 0.0
 
-        # 2. Token overlap bonus (if user explicitly mentions species or exact symptom words)
-        t_score = 0.0
-        if m_sp in q_clean:
-            t_score += 0.15
-        for word in m_obs.split():
-            if len(word) > 3 and word in q_clean:
-                t_score += 0.08
-
-        total_score = min(1.0, v_score + t_score)
-
-        if total_score >= threshold:
+        if v_score >= threshold:
             scored_memories.append({
                 "id": mem.get("id"),
                 "species": mem.get("species"),
                 "category": mem.get("category"),
                 "observation": mem.get("observation"),
                 "created_at": mem.get("created_at"),
-                "score": round(total_score, 3)
+                "score": round(v_score, 3)
             })
 
     # Sort descending by relevance score
@@ -171,11 +161,11 @@ def format_memories_for_rag(memories: List[Dict[str, Any]]) -> str:
     if not memories:
         return ""
 
-    lines = ["ACTIVE FARM CLINICAL OBSERVATIONS & MEMORY:"]
+    lines = ["ACTIVE FARM OBSERVATIONS & LONG-TERM MEMORY:"]
     for m in memories:
         date_str = (m.get("created_at") or "")[:10]
         sp = m.get("species", "General")
-        cat = m.get("category", "symptom")
+        cat = m.get("category", "general")
         obs = m.get("observation", "")
         lines.append(f"- [{date_str}] {sp} ({cat}): {obs}")
 
