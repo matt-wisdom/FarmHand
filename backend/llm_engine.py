@@ -41,6 +41,7 @@ RAG_MIN_SCORE = 0.55
 _llm_instance: Optional[Llama] = None
 _llama_grammar_instance: Optional[LlamaGrammar] = None
 _anti_json_logit_bias: Optional[Dict[int, float]] = None
+_english_logit_bias: Optional[Dict[int, float]] = None
 
 
 def normalize_language(lang: Optional[str]) -> str:
@@ -71,17 +72,18 @@ def build_tools_json_schema() -> Dict[str, Any]:
     }
 
 
-def get_llama_grammar() -> LlamaGrammar:
+def get_llama_grammar() -> Optional[LlamaGrammar]:
     global _llama_grammar_instance
     if _llama_grammar_instance is None:
-        schema_str = json.dumps(build_tools_json_schema())
-        _llama_grammar_instance = LlamaGrammar.from_json_schema(schema_str)
+        schema = build_tools_json_schema()
+        schema_json = json.dumps(schema)
+        _llama_grammar_instance = LlamaGrammar.from_json_schema(schema_json)
     return _llama_grammar_instance
 
 
 def get_llm() -> Optional[Llama]:
     """Lazy loader for llama.cpp model instance."""
-    global _llm_instance, _anti_json_logit_bias
+    global _llm_instance, _anti_json_logit_bias, _english_logit_bias
     if _llm_instance is None:
         if MODEL_PATH.exists():
             print(f"[llm_engine] Loading llama.cpp model from {MODEL_PATH} (threads={N_THREADS}, ctx={N_CTX})...")
@@ -96,6 +98,17 @@ def get_llm() -> Optional[Llama]:
             sq_tokens = _llm_instance.tokenize(b'[')
             cu_tokens = _llm_instance.tokenize(b'{')
             _anti_json_logit_bias = {tok: -100.0 for tok in sq_tokens + cu_tokens}
+
+            # English-mode bias: suppress JSON tokens + Pidgin particles directly in llama.cpp
+            pidgin_words = [
+                'dey', ' dey', 'Dey', ' Dey', 'wey', ' wey', 'Wey', 'well-well', ' well-well',
+                'wetin', ' wetin', 'Wetin', 'una', ' una', 'dem', ' dem', 'sabi', ' sabi'
+            ]
+            _english_logit_bias = dict(_anti_json_logit_bias)
+            for w in pidgin_words:
+                toks = _llm_instance.tokenize(w.encode('utf-8'), add_bos=False)
+                for t in toks:
+                    _english_logit_bias[t] = -100.0
         else:
             print(f"[llm_engine] Model file not found at {MODEL_PATH}")
             _llm_instance = None
@@ -265,80 +278,62 @@ def filter_relevant_rag_hits(rag_hits: List[Dict[str, Any]], min_score: float = 
 def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, norm_lang: str, db_summary: str) -> str:
     """Pass 3: Natural language synthesis using strictly positive prompting and API Chat Wrapper."""
 
-    if norm_lang == "pidgin":
-        language_rule = "Respond to the farmer ONLY in warm, natural Nigerian Pidgin English. Do not use standard/formal English."
-    else:
-        language_rule = "Respond to the farmer ONLY in formal, standard international English. Do not use Pidgin or any other language."
-
     # Budget context length to prevent exceeding token limits
     safe_context = context_data[:2500].strip() if context_data else ""
 
-    system_prompt = (
-        "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
-        f"{language_rule}\n\n"
-        f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
-        "INSTRUCTIONS:\n"
-        "- Read the Reference Context provided by the system.\n"
-        "- Answer the farmer's question directly based ONLY on facts present in the Reference Context.\n"
-        "- If the Reference Context states 'None' or '0', clearly inform the user they have no records or animals.\n"
-        "- If the Reference Context does NOT contain information that answers the farmer's question, say plainly "
-        "that you don't have that information yet, and ask a short clarifying question instead of guessing.\n"
-        "- NEVER invent numbers, species, counts, or facts that are not explicitly present in the Reference Context.\n"
-        "- Write in clear, conversational prose."
-    )
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
-    ]
+    if norm_lang == "pidgin":
+        system_prompt = (
+            "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
+            "Respond to the farmer ONLY in warm, natural Nigerian Pidgin English.\n\n"
+            f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
+            "INSTRUCTIONS:\n"
+            "- Answer based strictly on the Reference Context.\n"
+            "- State the exact facts, advice, or steps directly."
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
+        ]
+    else:
+        system_prompt = (
+            "You are FarmHand AI, an expert agricultural and veterinary specialist.\n"
+            "Respond to the farmer in clear, professional, standard international English.\n\n"
+            f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
+            "INSTRUCTIONS:\n"
+            "- Answer the farmer's question directly, clearly, and concisely based ONLY on facts present in the Reference Context.\n"
+            "- State specific clinical treatments, medications, active ingredients, dosage guidance, and management steps mentioned.\n"
+            "- Do NOT use Nigerian Pidgin, slang, or colloquial expressions.\n"
+            "- Do NOT ask conversational follow-up questions or delay your answer."
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": "Reference Context:\n- Treat tick infestations with approved acaricides (e.g. Amitraz spray or Cypermethrin dip).\n- Keep goat pens dry and well-ventilated.\n\nFarmer Question:\nHow do I manage ticks on my goats?"
+            },
+            {
+                "role": "assistant",
+                "content": "To manage ticks on goats, apply an approved acaricide spray or dipping solution such as Amitraz or Cypermethrin according to the manufacturer dosage. Inspect animals regularly and keep housing clean and dry to reduce tick exposure."
+            },
+            {"role": "user", "content": f"Reference Context:\n{safe_context}\n\nFarmer Question:\n{user_question}"}
+        ]
 
     # Calculate token headroom dynamically
     est_prompt_tokens = len(system_prompt + safe_context + user_question) // 3
     max_gen_tokens = max(64, min(300, N_CTX - est_prompt_tokens - 100))
 
+    bias = _english_logit_bias if norm_lang != "pidgin" else _anti_json_logit_bias
+
     response = llm.create_chat_completion(
         messages=messages,
         max_tokens=max_gen_tokens,
         temperature=0.1,
-        logit_bias=_anti_json_logit_bias,
+        repeat_penalty=1.15,
+        logit_bias=bias,
         stop=["<|im_end|>", "<|im_start|>"]
     )
 
     return response["choices"][0]["message"]["content"].strip()
-
-
-def clean_english_prose(text: str) -> str:
-    """Normalize model synthesis into standard English prose when in English mode."""
-    t = text
-    subs = [
-        (r'\bI dey help you with\b', 'Here is guidance on'),
-        (r'\bI dey\b', 'I am'),
-        (r'\bI go fit help you well-well\b', 'I am here to assist you'),
-        (r'\bwell-well\b', 'thoroughly'),
-        (r'\bmake you make sure say\b', 'ensure that'),
-        (r'\bmake you\b', 'please'),
-        (r'\bmake sure say\b', 'ensure that'),
-        (r'\bfit cause\b', 'can cause'),
-        (r'\bfit be\b', 'can be'),
-        (r'\bfit help\b', 'can help'),
-        (r'\bna because\b', 'This is usually caused by'),
-        (r'\bna so\b', 'that is how'),
-        (r'\bdey cause\b', 'causes'),
-        (r'\bdey come from\b', 'originates from'),
-        (r'\bdey sick\b', 'are sick'),
-        (r'\bdey dirty\b', 'is contaminated'),
-        (r'\bdey dry\b', 'remains dry'),
-        (r'\bdey affect\b', 'affects'),
-        (r'\bno dey\b', 'does not'),
-        (r'\bwetin\b', 'what'),
-        (r'\bwetin dey\b', 'what is'),
-        (r'\bgive dem\b', 'provide them with'),
-        (r'\bfor inside\b', 'inside'),
-    ]
-    for pattern, repl in subs:
-        t = re.sub(pattern, repl, t, flags=re.IGNORECASE)
-    t = re.sub(r'(?:^|[.!?]\s+)([a-z])', lambda m: m.group(0).upper(), t)
-    return t.strip()
 
 
 def format_tool_direct_response(tool_name: str, result: dict, farm_id: str, language: str = "english") -> Optional[str]:
@@ -490,7 +485,23 @@ def chat_completion(
         )
     }
 
-    routing_messages = [routing_system, {"role": "user", "content": current_query_en}]
+    # Build dialogue context from recent messages if multi-turn
+    if len(messages) > 1:
+        history_turns = []
+        for m in messages[-4:-1]:
+            r = "Farmer" if m.get("role") == "user" else "Assistant"
+            c = (m.get("content") or "").strip()
+            if c:
+                history_turns.append(f"{r}: {c}")
+        if history_turns:
+            dialogue_ctx = "\n".join(history_turns)
+            router_query_content = f"Recent Dialogue Context:\n{dialogue_ctx}\n\nCurrent Farmer Query:\n{current_query_en}"
+        else:
+            router_query_content = current_query_en
+    else:
+        router_query_content = current_query_en
+
+    routing_messages = [routing_system, {"role": "user", "content": router_query_content}]
     grammar = get_llama_grammar()
 
     print(f"[llm_engine] Running Pass 1 (Router)...")
@@ -553,29 +564,26 @@ def chat_completion(
 
     if rag_context:
         print(f"[llm_engine] Running Pass 3 (RAG Synthesis)...")
-        raw_output = generate_stateless_answer(llm, rag_context, current_query_en, norm_lang, farm_summary)
+        raw_output = generate_stateless_answer(llm, rag_context, router_query_content, norm_lang, farm_summary)
     elif tool_results:
         print(f"[llm_engine] Running Pass 3 (Database Synthesis)...")
         db_context = format_database_tool_context(tool_results)
-        raw_output = generate_stateless_answer(llm, db_context, current_query_en, norm_lang, farm_summary)
+        raw_output = generate_stateless_answer(llm, db_context, router_query_content, norm_lang, farm_summary)
     else:
         raw_output = "I couldn't process that command. Could you please rephrase what you need help with?"
 
     # Step 6: Post-process & Language formatting
-    if norm_lang == "pidgin":
-        final_output = raw_output
-    elif norm_lang == "hausa":
+    if norm_lang == "hausa":
         print(f"[llm_engine] Translating English response to Hausa...")
-        clean_en = clean_english_prose(raw_output)
-        ha_translated = translate_en_to_ha(clean_en)
+        ha_translated = translate_en_to_ha(raw_output)
         religious_artifacts = ["littafi mai tsarki", "ãdalci", "sikẽlin", "la'ĩmi", "al'ummai", "karin magana"]
         if any(art in ha_translated.lower() for art in religious_artifacts):
             print(f"[llm_engine] Detected MarianMT religious artifact in translation. Falling back to English.")
-            final_output = clean_en
+            final_output = raw_output
         else:
             final_output = ha_translated
-    else:  # English
-        final_output = clean_english_prose(raw_output)
+    else:  # English or Pidgin
+        final_output = raw_output
 
     total_time = time.time() - turn_start
     print(f"[llm_engine] TOTAL TURN TIME: {total_time:.2f}s\n")
