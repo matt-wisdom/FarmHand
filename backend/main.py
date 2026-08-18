@@ -27,6 +27,10 @@ from database import (
     get_flock_ledger_history,
     get_latest_ledger_anomaly,
     get_ledger_anomaly_history,
+    get_active_farm_memories,
+    get_all_farm_memories,
+    resolve_farm_memory,
+    delete_farm_memory,
     get_thread_by_id,
     get_thread_messages,
     init_db,
@@ -36,6 +40,7 @@ from database import (
 from llm_engine import chat_completion, get_llm
 import rag_pipeline
 import anomaly_detector
+import farm_memory
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -167,6 +172,12 @@ class FlockEventRequest(BaseModel):
     notes: Optional[str] = Field("", description="Optional event description or notes")
 
 
+class FarmMemoryRequest(BaseModel):
+    species: str = Field("General", description="Species observed")
+    category: str = Field("symptom", description="Category: symptom, behavior, treatment, feeding, general")
+    observation: str = Field(..., description="Clinical or behavioral observation description")
+
+
 # -------------------------------------------------------------------
 # Multi-Farm Management Endpoints
 # -------------------------------------------------------------------
@@ -286,6 +297,60 @@ def get_flock_count_endpoint(farm_id: str, species: Optional[str] = None, target
         "farm_id": farm_id,
         "data": result
     }
+
+
+# -------------------------------------------------------------------
+# Persistent Farm Memory & Clinical Observation Endpoints
+# -------------------------------------------------------------------
+
+@app.get("/api/farms/{farm_id}/memories", tags=["Farm Memory"])
+def get_farm_memories_endpoint(farm_id: str, status: Optional[str] = None):
+    """GET /api/farms/{farm_id}/memories: Retrieve all persistent memories for the active farm."""
+    if status == "active":
+        memories = get_active_farm_memories(farm_id=farm_id, limit=50)
+    else:
+        memories = get_all_farm_memories(farm_id=farm_id, limit=50)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "count": len(memories),
+        "memories": memories
+    }
+
+
+@app.post("/api/farms/{farm_id}/memories", tags=["Farm Memory"])
+def create_farm_memory_endpoint(farm_id: str, payload: FarmMemoryRequest):
+    """POST /api/farms/{farm_id}/memories: Manually record and embed a new clinical observation."""
+    mem = farm_memory.log_and_embed_observation(
+        farm_id=farm_id,
+        species=payload.species,
+        category=payload.category,
+        observation=payload.observation,
+        source="manual_ui"
+    )
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "memory": mem
+    }
+
+
+@app.put("/api/farms/{farm_id}/memories/{memory_id}/resolve", tags=["Farm Memory"])
+def resolve_farm_memory_endpoint(farm_id: str, memory_id: int):
+    """PUT /api/farms/{farm_id}/memories/{memory_id}/resolve: Mark observation as resolved."""
+    ok = resolve_farm_memory(memory_id=memory_id, farm_id=farm_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Memory record not found or already resolved")
+    return {"status": "success", "message": f"Memory {memory_id} marked as resolved"}
+
+
+@app.delete("/api/farms/{farm_id}/memories/{memory_id}", tags=["Farm Memory"])
+def delete_farm_memory_endpoint(farm_id: str, memory_id: int):
+    """DELETE /api/farms/{farm_id}/memories/{memory_id}: Permanently remove memory."""
+    ok = delete_farm_memory(memory_id=memory_id, farm_id=farm_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Memory record not found")
+    return {"status": "success", "message": f"Memory {memory_id} deleted"}
 
 
 # -------------------------------------------------------------------

@@ -16,6 +16,7 @@ from sklearn.ensemble import IsolationForest
 import database
 from database import (
     DB_PATH,
+    get_active_farm_memories,
     get_all_health_logs,
     get_current_flock_totals,
     get_db_connection,
@@ -110,7 +111,8 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
 def evaluate_deterministic_rules(
     events: List[Dict[str, Any]],
     health_logs: List[Dict[str, Any]],
-    current_totals: Dict[str, int]
+    current_totals: Dict[str, int],
+    farm_memories: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
     """
     Evaluates clinical and operational thresholds across the ledger:
@@ -118,7 +120,7 @@ def evaluate_deterministic_rules(
       - 7-day rolling mortality > 5% of species herd
       - Multi-day consecutive mortality streaks (>= 2 days)
       - Unexplained count reductions (> 10% drop on count_update/loss)
-      - Cross-reference active health symptoms in health_logs
+      - Cross-reference active health symptoms in health_logs and farm_memories
     """
     issues = []
     max_severity = "NORMAL"
@@ -281,6 +283,37 @@ def evaluate_deterministic_rules(
                         "species": species,
                         "description": f"Correlated medical symptom in health logs: '{note_content}' coinciding with recent {species} losses.",
                         "metrics": {"symptom": note_content, "event_type": event_type, "date": h_dt.strftime("%Y-%m-%d")}
+                    })
+                    max_severity = "CRITICAL"
+
+    # 6. Cross-Reference Persistent Active Farm Memories (Clinical Observations)
+    if farm_memories:
+        for mem in farm_memories:
+            m_time = mem.get("created_at") or ""
+            try:
+                m_dt = datetime.fromisoformat(m_time.replace("Z", "+00:00"))
+            except Exception:
+                m_dt = now
+
+            obs = (mem.get("observation") or "").lower()
+            m_sp = (mem.get("species") or "").lower()
+            obs_content = mem.get("observation") or ""
+            cat = mem.get("category", "symptom")
+
+            for species in recent_losses_by_species.keys():
+                if species.lower() in m_sp or species.lower() in obs or m_sp in ("general", "unknown"):
+                    correlated_symptoms.append({
+                        "species": species,
+                        "category": cat,
+                        "observation": obs_content,
+                        "date": m_dt.strftime("%Y-%m-%d")
+                    })
+                    issues.append({
+                        "type": "FARM_MEMORY_SYMPTOM_CORRELATION",
+                        "severity": "CRITICAL",
+                        "species": species,
+                        "description": f"Correlated clinical memory observation: '{obs_content}' coinciding with recent {species} losses.",
+                        "metrics": {"observation": obs_content, "category": cat, "date": m_dt.strftime("%Y-%m-%d")}
                     })
                     max_severity = "CRITICAL"
 
@@ -477,9 +510,15 @@ def run_flock_anomaly_detection(
     events = get_flock_ledger_history(farm_id=farm_id, limit=60, db_path=db_path)
     current_totals = get_current_flock_totals(farm_id=farm_id, db_path=db_path)
     health_logs = get_all_health_logs(farm_id=farm_id, db_path=db_path)
+    farm_memories = get_active_farm_memories(farm_id=farm_id, limit=30, db_path=db_path)
 
     # 1. Evaluate Layer 1 Deterministic Rules
-    det_severity, det_issues, summary_stats = evaluate_deterministic_rules(events, health_logs, current_totals)
+    det_severity, det_issues, summary_stats = evaluate_deterministic_rules(
+        events=events,
+        health_logs=health_logs,
+        current_totals=current_totals,
+        farm_memories=farm_memories
+    )
 
     # 2. Evaluate Layer 2 Classical ML Models
     ml_anomaly, ml_score, ml_outliers = evaluate_classical_ml_anomalies(events)

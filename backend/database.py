@@ -158,8 +158,25 @@ def init_db(db_path: Path = DB_PATH):
             )
         """)
 
+        # Persistent Farm Memories & Clinical Observations Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farm_id TEXT NOT NULL,
+                species TEXT NOT NULL,
+                category TEXT NOT NULL,
+                observation TEXT NOT NULL,
+                embedding_json TEXT DEFAULT '[]',
+                source TEXT NOT NULL DEFAULT 'chat',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP DEFAULT NULL,
+                FOREIGN KEY(farm_id) REFERENCES farms(id) ON DELETE CASCADE
+            )
+        """)
+
         # Auto-migrate missing columns for existing databases
-        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals", "flock_ledger", "ledger_anomalies"]:
+        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals", "flock_ledger", "ledger_anomalies", "farm_memories"]:
             try:
                 cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN farm_id TEXT DEFAULT 'default_farm'")
             except sqlite3.OperationalError:
@@ -577,6 +594,138 @@ def get_ledger_anomaly_history(
                 item["metrics"] = {}
             results.append(item)
         return results
+
+
+# -------------------------------------------------------------------
+# Persistent Farm Memory & Clinical Observation Functions
+# -------------------------------------------------------------------
+
+def save_farm_memory(
+    farm_id: str,
+    species: str,
+    category: str,
+    observation: str,
+    embedding: Optional[List[float]] = None,
+    source: str = "chat",
+    db_path: Path = DB_PATH
+) -> Dict[str, Any]:
+    """Persists a new clinical or behavioral observation into farm_memories."""
+    emb_str = json.dumps(embedding) if embedding is not None else "[]"
+    norm_species = normalize_species_name(species)
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO farm_memories (farm_id, species, category, observation, embedding_json, source, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'active')
+            """,
+            (farm_id, norm_species, category.lower().strip(), observation.strip(), emb_str, source)
+        )
+        mem_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM farm_memories WHERE id = ?", (mem_id,))
+        row = cursor.fetchone()
+        res = dict(row)
+        try:
+            res["embedding"] = json.loads(res.get("embedding_json", "[]"))
+        except Exception:
+            res["embedding"] = []
+        return res
+
+
+def get_active_farm_memories(
+    farm_id: str = "default_farm",
+    species: Optional[str] = None,
+    limit: int = 20,
+    db_path: Path = DB_PATH
+) -> List[Dict[str, Any]]:
+    """Retrieves all active clinical observations for a farm, optionally filtered by species."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        if species:
+            norm_species = normalize_species_name(species)
+            cursor.execute(
+                """
+                SELECT * FROM farm_memories 
+                WHERE farm_id = ? AND status = 'active' AND species = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (farm_id, norm_species, limit)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM farm_memories 
+                WHERE farm_id = ? AND status = 'active'
+                ORDER BY id DESC LIMIT ?
+                """,
+                (farm_id, limit)
+            )
+        results = []
+        for r in cursor.fetchall():
+            item = dict(r)
+            try:
+                item["embedding"] = json.loads(item.get("embedding_json", "[]"))
+            except Exception:
+                item["embedding"] = []
+            results.append(item)
+        return results
+
+
+def get_all_farm_memories(
+    farm_id: str = "default_farm",
+    limit: int = 50,
+    db_path: Path = DB_PATH
+) -> List[Dict[str, Any]]:
+    """Retrieves all memories (active and resolved) for audit and history."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM farm_memories WHERE farm_id = ? ORDER BY id DESC LIMIT ?",
+            (farm_id, limit)
+        )
+        results = []
+        for r in cursor.fetchall():
+            item = dict(r)
+            try:
+                item["embedding"] = json.loads(item.get("embedding_json", "[]"))
+            except Exception:
+                item["embedding"] = []
+            results.append(item)
+        return results
+
+
+def resolve_farm_memory(
+    memory_id: int,
+    farm_id: str = "default_farm",
+    db_path: Path = DB_PATH
+) -> bool:
+    """Marks an active clinical observation as resolved/cured."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE farm_memories 
+            SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND farm_id = ?
+            """,
+            (memory_id, farm_id)
+        )
+        return cursor.rowcount > 0
+
+
+def delete_farm_memory(
+    memory_id: int,
+    farm_id: str = "default_farm",
+    db_path: Path = DB_PATH
+) -> bool:
+    """Deletes a memory record permanently."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM farm_memories WHERE id = ? AND farm_id = ?",
+            (memory_id, farm_id)
+        )
+        return cursor.rowcount > 0
 
 
 def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> str:

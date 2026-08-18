@@ -417,6 +417,7 @@
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary-green" @click="openAddMemoryModal">+ Note Observation</button>
               <button class="btn-green" @click="openAddFlockModal('purchase')">+ Log Event</button>
             </div>
           </div>
@@ -458,6 +459,30 @@
             <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
               {{ isAnalyzingAnomaly ? 'Scanning...' : 'Run Anomaly Scan' }}
             </button>
+          </div>
+
+          <!-- Active Clinical Observations & Farm Memory Section -->
+          <div v-if="farmMemories.length > 0" style="margin-bottom: 16px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 0.84rem; font-weight: 700; color: var(--text-main);">
+                <span>Active Clinical Observations</span>
+                <span class="badge badge-blue" style="font-size: 0.7rem;">{{ activeMemoriesCount }} Active</span>
+              </div>
+              <button class="btn-sm btn-outline-muted" style="font-size: 0.76rem;" @click="openAddMemoryModal">+ Note Observation</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div v-for="mem in farmMemories" :key="mem.id" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.83rem; padding: 6px 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span class="badge" :class="mem.status === 'active' ? 'badge-amber' : 'badge-green'">{{ mem.species }} ({{ mem.category }})</span>
+                  <span :style="{ textDecoration: mem.status === 'resolved' ? 'line-through' : 'none', color: mem.status === 'resolved' ? 'var(--text-muted)' : 'var(--text-main)' }">{{ mem.observation }}</span>
+                  <span style="color: var(--text-muted); font-size: 0.76rem;" v-if="mem.created_at">({{ mem.created_at.slice(0, 10) }})</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <button v-if="mem.status === 'active'" class="btn-sm btn-outline-rose" style="font-size: 0.72rem; padding: 2px 6px;" @click="resolveMemory(mem.id)">Resolve</button>
+                  <button class="btn-sm btn-outline-muted" style="font-size: 0.72rem; padding: 2px 6px;" @click="deleteMemory(mem.id)">✕</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Minimalist Filter Bar -->
@@ -862,6 +887,47 @@
       </div>
     </div>
 
+    <!-- MODAL: ADD CLINICAL OBSERVATION / MEMORY -->
+    <div v-if="showAddMemoryModal" class="modal-overlay" @click.self="showAddMemoryModal = false">
+      <div class="modal-card">
+        <div class="modal-header-bar">
+          <h3>Log Clinical Observation</h3>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddMemoryModal = false">✕</button>
+        </div>
+        <div class="modal-body-content">
+          <div class="form-group">
+            <label>Species</label>
+            <select class="form-control" v-model="newMemory.species">
+              <option value="Goat">Goats</option>
+              <option value="Poultry">Poultry / Chickens</option>
+              <option value="Cattle">Cattle / Cows</option>
+              <option value="Sheep">Sheep</option>
+              <option value="Pig">Pigs</option>
+              <option value="General">General / All Herd</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select class="form-control" v-model="newMemory.category">
+              <option value="symptom">Symptom (e.g. coughing, limping, fever)</option>
+              <option value="behavior">Behavior (e.g. lethargic, moving weird)</option>
+              <option value="treatment">Treatment / Medication administered</option>
+              <option value="feeding">Feeding / Water intake</option>
+              <option value="general">General observation</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Observation Details</label>
+            <textarea class="form-control" rows="3" placeholder="Describe what you observed..." v-model="newMemory.observation"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showAddMemoryModal = false">Cancel</button>
+          <button class="btn-green" @click="submitAddMemory">Save Observation</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -983,6 +1049,15 @@
         const latestAnomaly = ref(null);
         const showAnomalyModal = ref(false);
         const isAnalyzingAnomaly = ref(false);
+
+        // Farm Clinical Memories State
+        const farmMemories = ref([]);
+        const showAddMemoryModal = ref(false);
+        const newMemory = ref({ species: 'Goat', category: 'symptom', observation: '' });
+
+        const activeMemoriesCount = computed(() => {
+          return farmMemories.value.filter(m => m.status === 'active').length;
+        });
 
         const renderedAnomalyReport = computed(() => {
           if (!latestAnomaly.value || !latestAnomaly.value.report_text) return '';
@@ -1118,8 +1193,76 @@
               const aData = await resAnom.json();
               latestAnomaly.value = aData.latest || null;
             }
+            await fetchFarmMemories();
           } catch (e) {
             console.error('Error fetching flock ledger:', e);
+          }
+        };
+
+        const fetchFarmMemories = async () => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/memories`);
+            if (res.ok) {
+              const data = await res.json();
+              farmMemories.value = data.memories || [];
+            }
+          } catch (e) {
+            console.error('Error fetching farm memories:', e);
+          }
+        };
+
+        const openAddMemoryModal = () => {
+          newMemory.value = {
+            species: activeFarm.value?.farm_type && activeFarm.value?.farm_type !== 'General' ? activeFarm.value.farm_type : 'Goat',
+            category: 'symptom',
+            observation: ''
+          };
+          showAddMemoryModal.value = true;
+        };
+
+        const submitAddMemory = async () => {
+          if (!activeFarmId.value || !newMemory.value.observation.trim()) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/memories`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newMemory.value)
+            });
+            if (res.ok) {
+              showToast('Observation Recorded');
+              await fetchFarmMemories();
+              showAddMemoryModal.value = false;
+              newMemory.value = { species: 'Goat', category: 'symptom', observation: '' };
+            }
+          } catch (e) {
+            console.error('Error submitting memory observation:', e);
+          }
+        };
+
+        const resolveMemory = async (memoryId) => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/memories/${memoryId}/resolve`, { method: 'PUT' });
+            if (res.ok) {
+              showToast('Observation marked as resolved');
+              await fetchFarmMemories();
+            }
+          } catch (e) {
+            console.error('Error resolving memory:', e);
+          }
+        };
+
+        const deleteMemory = async (memoryId) => {
+          if (!activeFarmId.value) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/memories/${memoryId}`, { method: 'DELETE' });
+            if (res.ok) {
+              showToast('Observation removed');
+              await fetchFarmMemories();
+            }
+          } catch (e) {
+            console.error('Error deleting memory:', e);
           }
         };
 
@@ -1498,6 +1641,15 @@
           openAnomalyModal,
           runAnomalyCheck,
           fetchFlockAnomalies,
+          farmMemories,
+          showAddMemoryModal,
+          newMemory,
+          activeMemoriesCount,
+          fetchFarmMemories,
+          openAddMemoryModal,
+          submitAddMemory,
+          resolveMemory,
+          deleteMemory,
           editingMsgId,
           editBuffer,
           showAddExpenditureModal,

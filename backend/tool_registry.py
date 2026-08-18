@@ -115,19 +115,44 @@ def write_expenditure(category: str, amount: float, description: str = "") -> Di
     }
 
 
-def write_health_log(animal_id: str, event_type: str, notes: str = "") -> Dict[str, Any]:
+def write_health_log(animal_id: str, event_type: str, notes: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Record a health log entry for an animal into the SQLite database."""
     with get_db_connection(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO health_logs (animal_id, event_type, notes) VALUES (?, ?, ?)",
-            (animal_id, event_type, notes)
+            "INSERT INTO health_logs (farm_id, animal_id, event_type, notes) VALUES (?, ?, ?, ?)",
+            (farm_id, animal_id, event_type, notes)
         )
         record_id = cursor.lastrowid
     return {
         "status": "success",
         "message": f"Health log recorded for animal {animal_id} with ID {record_id}",
-        "data": {"id": record_id, "animal_id": animal_id, "event_type": event_type, "notes": notes}
+        "data": {"id": record_id, "farm_id": farm_id, "animal_id": animal_id, "event_type": event_type, "notes": notes}
+    }
+
+
+def log_farm_observation(
+    species: str,
+    observation: str,
+    category: str = "symptom",
+    notes: str = "",
+    farm_id: str = "default_farm"
+) -> Dict[str, Any]:
+    """Log an observational clinical symptom, behavioral anomaly, or medication into persistent farm memory."""
+    import farm_memory
+    cat = category.lower().strip() if category else "symptom"
+    obs_text = f"{observation} ({notes})".strip() if notes else observation.strip()
+    mem = farm_memory.log_and_embed_observation(
+        farm_id=farm_id,
+        species=species,
+        category=cat,
+        observation=obs_text,
+        source="chat_tool"
+    )
+    return {
+        "status": "success",
+        "message": f"Recorded {species} {cat} observation into farm memory",
+        "memory": mem
     }
 
 
@@ -198,6 +223,7 @@ TOOL_MAP = {
     "list_health_logs": list_health_logs,
     "write_expenditure": write_expenditure,
     "write_health_log": write_health_log,
+    "log_farm_observation": log_farm_observation,
     "get_sensor_data": get_sensor_data,
     "get_animal_record": get_animal_record,
     "trigger_vision_reid": trigger_vision_reid,
@@ -205,6 +231,19 @@ TOOL_MAP = {
 }
 
 TOOL_SCHEMAS = [
+    {
+        "name": "log_farm_observation",
+        "description": "Log an observational clinical symptom, behavioral anomaly, disease observation, or medication into persistent farm memory. Use when the user reports physical symptoms (e.g. limping, coughing, moving weird, not eating), health issues, or treatments.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "species": {"type": "string", "description": "Species observed (e.g. goat, poultry, cattle, sheep)"},
+                "observation": {"type": "string", "description": "Clinical or behavioral observation description"},
+                "category": {"type": "string", "description": "Category: symptom, behavior, treatment, feeding, general"}
+            },
+            "required": ["species", "observation"]
+        }
+    },
     {
         "name": "list_animals",
         "description": "List current or historical flock totals from the flock ledger. Use this tool whenever the user asks how many animals/chickens they have or had.",
@@ -372,6 +411,13 @@ def normalize_tool_arguments(function_name: str, args: Dict[str, Any]) -> Dict[s
     elif function_name == "get_animal_record":
         aid = norm_args.get("id") or norm_args.get("animal_id") or norm_args.get("node_id") or ""
         return {"id": str(aid)}
+
+    elif function_name == "log_farm_observation":
+        sp = norm_args.get("species") or norm_args.get("animal_type") or norm_args.get("animal") or "General"
+        obs = norm_args.get("observation") or norm_args.get("notes") or norm_args.get("description") or norm_args.get("symptom") or "Observed symptom"
+        cat = norm_args.get("category") or norm_args.get("type") or "symptom"
+        notes = norm_args.get("notes") or ""
+        return {"species": str(sp).strip(), "observation": str(obs).strip(), "category": str(cat).strip(), "notes": str(notes).strip()}
 
     elif function_name == "query_knowledge_base":
         query = norm_args.get("search_query") or norm_args.get("query") or norm_args.get("prompt") or ""

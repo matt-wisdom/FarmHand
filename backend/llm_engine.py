@@ -237,6 +237,11 @@ def format_database_tool_context(tool_results: List[Dict[str, Any]]) -> str:
             else:
                 lines.append("- Health History: None recorded")
 
+        elif tool == "log_farm_observation" and isinstance(res, dict):
+            mem = res.get("memory", {})
+            lines.append("FARM CLINICAL OBSERVATION LOGGED:")
+            lines.append(f"- Saved observation for {mem.get('species', 'Flock')} ({mem.get('category', 'symptom')}): {mem.get('observation')}")
+
         else:
             lines.append(f"- {tool}: {json.dumps(res)}")
 
@@ -408,6 +413,16 @@ def format_tool_direct_response(tool_name: str, result: dict, farm_id: str, lang
         data = result.get("data", {})
         return f"Recorded: Health event '{data.get('event_type')}' logged successfully for animal {data.get('animal_id')}."
 
+    elif tool_name == "log_farm_observation":
+        mem = result.get("memory", {})
+        sp = mem.get("species", "Livestock")
+        obs = mem.get("observation", "")
+        if language == "hausa":
+            return f"An rubuta lura a bayanan gonar {farm_name}: {sp} - {obs}."
+        elif language == "pidgin":
+            return f"I don log this observation for your farm {farm_name} memory: {sp} - {obs}."
+        return f"Recorded into persistent memory for {farm_name}: {sp} - {obs}."
+
     return None
 
 
@@ -462,6 +477,7 @@ def chat_completion(
             "- register_flock(species: str, count: int, event_type: str, notes: str): Set, record, or update animal headcount (e.g. 'I have 5 chickens', 'We currently have 9 goats', 'bought 10 cows', '2 birds died').\n"
             "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
             "- write_expenditure(category: str, amount: float, description: str): Record a new financial expense.\n"
+            "- log_farm_observation(species: str, observation: str, category: str): Record an observed physical symptom, abnormal movement, disease sign, or medication into farm memory.\n"
             "- query_knowledge_base(search_query: str): Ask about diseases, illness, symptoms, treatments, medication, vaccines, feeding, or farming advice.\n\n"
             "SPECIES MAPPING:\n"
             "- chickens / hens / broilers / birds -> \"poultry\"\n"
@@ -479,6 +495,7 @@ def chat_completion(
             "Farmer: 'I bought 10 cows' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"cattle\", \"count\": 10, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
             "Farmer: 'We bought 15 sheep' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"sheep\", \"count\": 15, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
             "Farmer: '3 chickens died today' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -3, \"event_type\": \"mortality\", \"notes\": \"\"}}]\n"
+            "Farmer: 'my goat is moving weird' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat abnormal movement causes\"}}]\n"
             "Farmer: 'what causes coughing in goats' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat coughing causes treatment\"}}]\n"
             "Farmer: 'What should i first do when i get a new chicken?' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"new chicken arrival care guidelines\"}}]\n"
             "Farmer: 'how much have i spent this month' -> [{\"function_name\": \"list_expenditures\", \"arguments\": {}}]"
@@ -519,6 +536,7 @@ def chat_completion(
     # Step 4: Execute Tools
     tool_results = []
     rag_context = ""
+    logged_mem_in_tools = False
 
     if is_tool_call:
         for call in tool_calls:
@@ -528,17 +546,36 @@ def chat_completion(
             res = execute_tool(fn_name, fn_args, farm_id=farm_id)
             tool_results.append({"tool": fn_name, "result": res})
 
+            if fn_name == "log_farm_observation":
+                logged_mem_in_tools = True
+
             if fn_name == "query_knowledge_base" and isinstance(res, dict) and "context_prompt" in res:
                 rag_context = res["context_prompt"]
+
+    # Auto-log clinical observations if user reported physical/behavioral symptoms and not logged yet
+    symptom_triggers = ["moving weird", "walk funny", "limp", "cough", "sneeze", "not eating", "refus", "swoll", "diarrhea", "bloody", "blister", "discharge", "lesion", "fever", "pale eye", "paraly", "trembl", "tick", "flea", "worm"]
+    q_lower = current_query_en.lower()
+    if not logged_mem_in_tools and any(st in q_lower for st in symptom_triggers):
+        matched_sp = "General"
+        for sp_k, sp_v in [("goat", "Goat"), ("poultry", "Poultry"), ("chicken", "Poultry"), ("bird", "Poultry"), ("cattle", "Cattle"), ("cow", "Cattle"), ("bull", "Cattle"), ("sheep", "Sheep"), ("ram", "Sheep"), ("pig", "Pig")]:
+            if sp_k in q_lower:
+                matched_sp = sp_v
+                break
+        try:
+            import farm_memory
+            farm_memory.log_and_embed_observation(
+                farm_id=farm_id,
+                species=matched_sp,
+                category="symptom",
+                observation=last_user_query,
+                source="chat_inferred"
+            )
+        except Exception as e:
+            print(f"[llm_engine] Auto-log observation notice: {e}")
 
     if not is_tool_call and len(current_query_en) > 5:
         print("[llm_engine] Pass 1 yielded no tools, falling back to RAG safety net...")
         rag_hits = search_knowledge_base(current_query_en, top_k=2)
-
-        # --- FIX A: only trust RAG hits that clear a relevance floor. Without this,
-        # an off-topic query (e.g. a database/inventory question the router failed
-        # to catch) gets "answered" using whatever nearest-neighbor chunks the
-        # retriever returned, even if none of them are actually relevant. ---
         relevant_hits = filter_relevant_rag_hits(rag_hits)
 
         if relevant_hits:
@@ -548,13 +585,23 @@ def chat_completion(
         else:
             print("[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise.")
 
+    # Inject semantically matching farm memories into RAG context
+    try:
+        import farm_memory
+        matching_mems = farm_memory.search_farm_memories(farm_id=farm_id, query=current_query_en, top_k=3)
+        if matching_mems:
+            mem_block = farm_memory.format_memories_for_rag(matching_mems)
+            rag_context = f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
+            print(f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context.")
+    except Exception as e:
+        print(f"[llm_engine] Semantic memory retrieval notice: {e}")
+
     # Step 5: SYNTHESIS / RESULT DISPATCH
     if is_tool_call:
-        # Check if a database tool was executed
         for call in tool_calls:
             fn_name = call["function_name"]
             tool_match = next((tr["result"] for tr in tool_results if tr["tool"] == fn_name), None)
-            if tool_match and fn_name in ("list_animals", "register_flock", "list_expenditures", "write_expenditure", "list_health_logs", "write_health_log"):
+            if tool_match and fn_name in ("list_animals", "register_flock", "list_expenditures", "write_expenditure", "list_health_logs", "write_health_log", "log_farm_observation") and not rag_context:
                 db_direct_ans = format_tool_direct_response(fn_name, tool_match, farm_id=farm_id, language=norm_lang)
                 if db_direct_ans:
                     print(f"[llm_engine] Database tool '{fn_name}' direct response generated.")
