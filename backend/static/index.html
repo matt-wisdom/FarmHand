@@ -421,6 +421,45 @@
             </div>
           </div>
 
+          <!-- Minimalist Anomaly Alert Banner -->
+          <div v-if="latestAnomaly && latestAnomaly.severity === 'CRITICAL'" class="anomaly-alert-banner alert-critical">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span class="badge badge-rose">CRITICAL ALERT</span>
+              <span style="font-weight: 600; font-size: 0.88rem;">{{ latestAnomaly.title }}</span>
+              <span style="color: var(--text-muted); font-size: 0.8rem;" v-if="latestAnomaly.created_at">({{ latestAnomaly.created_at.slice(0, 16) }})</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-sm btn-outline-rose" @click="openAnomalyModal">View Advisory Report</button>
+              <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
+                {{ isAnalyzingAnomaly ? 'Scanning...' : 'Re-Scan' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-else-if="latestAnomaly && latestAnomaly.severity === 'WARNING'" class="anomaly-alert-banner alert-warning">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span class="badge badge-amber">WARNING</span>
+              <span style="font-weight: 600; font-size: 0.88rem;">{{ latestAnomaly.title }}</span>
+              <span style="color: var(--text-muted); font-size: 0.8rem;" v-if="latestAnomaly.created_at">({{ latestAnomaly.created_at.slice(0, 16) }})</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-sm btn-outline-amber" @click="openAnomalyModal">View Advisory Report</button>
+              <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
+                {{ isAnalyzingAnomaly ? 'Scanning...' : 'Re-Scan' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-else-if="latestAnomaly && latestAnomaly.severity === 'NORMAL'" class="anomaly-status-bar">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-muted);">
+              <span class="badge badge-green">NORMAL</span>
+              <span>Flock baseline stable. No anomalies detected.</span>
+            </div>
+            <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
+              {{ isAnalyzingAnomaly ? 'Scanning...' : 'Run Anomaly Scan' }}
+            </button>
+          </div>
+
           <!-- Minimalist Filter Bar -->
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -786,6 +825,43 @@
       </div>
     </div>
 
+    <!-- MODAL: ANOMALY ADVISORY REPORT -->
+    <div v-if="showAnomalyModal" class="modal-overlay" @click.self="showAnomalyModal = false">
+      <div class="modal-card" style="max-width: 680px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header-bar" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700;">Flock Health & Anomaly Report</h3>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+              Generated: {{ latestAnomaly ? latestAnomaly.created_at : '' }} — 
+              <span class="badge" :class="{
+                'badge-rose': latestAnomaly && latestAnomaly.severity === 'CRITICAL',
+                'badge-amber': latestAnomaly && latestAnomaly.severity === 'WARNING',
+                'badge-green': latestAnomaly && latestAnomaly.severity === 'NORMAL'
+              }">{{ latestAnomaly ? latestAnomaly.severity : 'NORMAL' }}</span>
+            </div>
+          </div>
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAnomalyModal = false">✕</button>
+        </div>
+
+        <div class="modal-body-content" style="overflow-y: auto; padding: 16px 0; font-size: 0.9rem; line-height: 1.6; color: var(--text-main); flex: 1;">
+          <div v-html="renderedAnomalyReport" style="white-space: pre-wrap; font-family: inherit;"></div>
+
+          <div v-if="latestAnomaly && latestAnomaly.metrics && latestAnomaly.metrics.deterministic_issues && latestAnomaly.metrics.deterministic_issues.length > 0" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">
+              Triggered Rule Diagnostics
+            </h4>
+            <div v-for="(iss, idx) in latestAnomaly.metrics.deterministic_issues" :key="idx" style="margin-bottom: 8px; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-hover); border-radius: 4px;">
+              <strong style="color: var(--text-main);">[{{ iss.severity }}] {{ iss.type }}</strong>: {{ iss.description }}
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer-bar" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <button class="btn-secondary-green" @click="showAnomalyModal = false">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -903,6 +979,20 @@
         const showAddFlockModal = ref(false);
         const newFlockEvent = ref({ species: 'Poultry', count_change: 0, exact_total: null, event_type: 'purchase', notes: '' });
 
+        // Flock Anomaly Detection State
+        const latestAnomaly = ref(null);
+        const showAnomalyModal = ref(false);
+        const isAnalyzingAnomaly = ref(false);
+
+        const renderedAnomalyReport = computed(() => {
+          if (!latestAnomaly.value || !latestAnomaly.value.report_text) return '';
+          try {
+            return marked.parse(latestAnomaly.value.report_text);
+          } catch (e) {
+            return latestAnomaly.value.report_text;
+          }
+        });
+
         const flockFilterSpecies = ref('');
         const flockFilterEvent = ref('');
         const flockSearchQuery = ref('');
@@ -1014,16 +1104,44 @@
         const fetchFlockLedger = async () => {
           if (!activeFarmId.value) return;
           try {
-            const res = await fetch(`/api/farms/${activeFarmId.value}/flock-ledger`);
-            if (res.ok) {
-              const data = await res.json();
+            const [resLedger, resAnom] = await Promise.all([
+              fetch(`/api/farms/${activeFarmId.value}/flock-ledger`),
+              fetch(`/api/farms/${activeFarmId.value}/flock-ledger/anomalies`)
+            ]);
+            if (resLedger.ok) {
+              const data = await resLedger.json();
               flockTotals.value = data.current_totals || {};
               totalFlockSize.value = data.total_flock_size || 0;
               flockHistory.value = data.history || [];
             }
+            if (resAnom.ok) {
+              const aData = await resAnom.json();
+              latestAnomaly.value = aData.latest || null;
+            }
           } catch (e) {
             console.error('Error fetching flock ledger:', e);
           }
+        };
+
+        const runAnomalyCheck = async () => {
+          if (!activeFarmId.value || isAnalyzingAnomaly.value) return;
+          isAnalyzingAnomaly.value = true;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/flock-ledger/anomalies/run`, { method: 'POST' });
+            if (res.ok) {
+              const data = await res.json();
+              latestAnomaly.value = data.anomaly_report || null;
+              showToast('Flock Anomaly Scan Complete');
+            }
+          } catch (e) {
+            console.error('Error running anomaly scan:', e);
+          } finally {
+            isAnalyzingAnomaly.value = false;
+          }
+        };
+
+        const openAnomalyModal = () => {
+          showAnomalyModal.value = true;
         };
 
         const submitFlockEvent = async () => {
@@ -1373,6 +1491,13 @@
           openAddFlockModal,
           fetchFlockLedger,
           submitFlockEvent,
+          latestAnomaly,
+          showAnomalyModal,
+          isAnalyzingAnomaly,
+          renderedAnomalyReport,
+          openAnomalyModal,
+          runAnomalyCheck,
+          fetchFlockAnomalies,
           editingMsgId,
           editBuffer,
           showAddExpenditureModal,

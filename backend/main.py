@@ -25,6 +25,8 @@ from database import (
     get_farms,
     get_flock_count_on_date,
     get_flock_ledger_history,
+    get_latest_ledger_anomaly,
+    get_ledger_anomaly_history,
     get_thread_by_id,
     get_thread_messages,
     init_db,
@@ -33,6 +35,7 @@ from database import (
 )
 from llm_engine import chat_completion, get_llm
 import rag_pipeline
+import anomaly_detector
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -231,7 +234,7 @@ def get_flock_ledger_endpoint(farm_id: str):
 
 @app.post("/api/farms/{farm_id}/flock-ledger", tags=["Flock Ledger"])
 def record_flock_event_endpoint(farm_id: str, payload: FlockEventRequest):
-    """POST /api/farms/{farm_id}/flock-ledger: Records a new count event (purchase, mortality, update)."""
+    """POST /api/farms/{farm_id}/flock-ledger: Records a new count event and evaluates ledger anomalies."""
     entry = record_flock_event(
         farm_id=farm_id,
         species=payload.species,
@@ -240,10 +243,37 @@ def record_flock_event_endpoint(farm_id: str, payload: FlockEventRequest):
         event_type=payload.event_type,
         notes=payload.notes or ""
     )
+    # Automatically trigger anomaly detection upon ledger update
+    anomaly_eval = anomaly_detector.run_flock_anomaly_detection(farm_id=farm_id, trigger_source="api_ledger_post")
     return {
         "status": "success",
         "farm_id": farm_id,
-        "entry": entry
+        "entry": entry,
+        "anomaly_evaluation": anomaly_eval
+    }
+
+
+@app.get("/api/farms/{farm_id}/flock-ledger/anomalies", tags=["Flock Ledger"])
+def get_flock_anomalies_endpoint(farm_id: str):
+    """GET /api/farms/{farm_id}/flock-ledger/anomalies: Returns latest anomaly evaluation and history."""
+    latest = get_latest_ledger_anomaly(farm_id=farm_id)
+    history = get_ledger_anomaly_history(farm_id=farm_id, limit=10)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "latest": latest,
+        "history": history
+    }
+
+
+@app.post("/api/farms/{farm_id}/flock-ledger/anomalies/run", tags=["Flock Ledger"])
+def trigger_flock_anomalies_endpoint(farm_id: str):
+    """POST /api/farms/{farm_id}/flock-ledger/anomalies/run: Manually triggers anomaly analysis."""
+    record = anomaly_detector.run_flock_anomaly_detection(farm_id=farm_id, trigger_source="manual_ui_trigger")
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "anomaly_report": record
     }
 
 

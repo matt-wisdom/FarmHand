@@ -1466,3 +1466,69 @@ html, body {
   color: var(--accent-blue);
   border: 1px solid rgba(37, 99, 235, 0.2);
 }
+
+/* Anomaly Detection UI Styles */
+.anomaly-alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.alert-critical {
+  background-color: rgba(225, 29, 72, 0.06);
+  border: 1px solid rgba(225, 29, 72, 0.3);
+  color: var(--text-main);
+}
+
+.alert-warning {
+  background-color: rgba(217, 119, 6, 0.06);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  color: var(--text-main);
+}
+
+.anomaly-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-outline-rose {
+  background: transparent;
+  color: var(--accent-rose);
+  border: 1px solid rgba(225, 29, 72, 0.4);
+}
+.btn-outline-rose:hover {
+  background: rgba(225, 29, 72, 0.1);
+}
+
+.btn-outline-amber {
+  background: transparent;
+  color: var(--accent-amber);
+  border: 1px solid rgba(217, 119, 6, 0.4);
+}
+.btn-outline-amber:hover {
+  background: rgba(217, 119, 6, 0.1);
+}
+
+.btn-outline-muted {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+.btn-outline-muted:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+

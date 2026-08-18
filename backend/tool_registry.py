@@ -62,6 +62,7 @@ def list_animals(species: str = "", farm_id: str = "default_farm", date_str: str
 def register_flock(species: str, count: int, notes: str = "", event_type: str = "count_update", farm_id: str = "default_farm") -> Dict[str, Any]:
     """Record a flock count update, purchase, or mortality into the flock ledger."""
     import database
+    import anomaly_detector
     evt = event_type.lower().strip() if event_type else "count_update"
     is_delta = evt in ("purchase", "mortality", "sale", "loss", "addition") or int(count) < 0
     entry = database.record_flock_event(
@@ -72,6 +73,11 @@ def register_flock(species: str, count: int, notes: str = "", event_type: str = 
         event_type=evt,
         notes=notes
     )
+    # Trigger anomaly evaluation
+    try:
+        anomaly_detector.run_flock_anomaly_detection(farm_id=farm_id, trigger_source="chat_tool_register_flock")
+    except Exception as e:
+        print(f"[tool_registry] Anomaly detection trigger notice: {e}")
     return {"status": "success", "entry": entry, "new_total": entry["new_total"]}
 
 

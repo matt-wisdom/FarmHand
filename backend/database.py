@@ -144,8 +144,22 @@ def init_db(db_path: Path = DB_PATH):
             )
         """)
 
+        # Flock Ledger Anomalies Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ledger_anomalies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farm_id TEXT NOT NULL,
+                severity TEXT NOT NULL, -- 'NORMAL', 'INFO', 'WARNING', 'CRITICAL'
+                title TEXT NOT NULL,
+                metrics_json TEXT NOT NULL,
+                report_text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(farm_id) REFERENCES farms(id) ON DELETE CASCADE
+            )
+        """)
+
         # Auto-migrate missing columns for existing databases
-        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals", "flock_ledger"]:
+        for tbl in ["chat_threads", "expenditures", "health_logs", "telemetry_data", "animals", "flock_ledger", "ledger_anomalies"]:
             try:
                 cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN farm_id TEXT DEFAULT 'default_farm'")
             except sqlite3.OperationalError:
@@ -294,6 +308,19 @@ def get_all_health_logs(farm_id: str = "default_farm", db_path: Path = DB_PATH) 
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM health_logs WHERE farm_id = ? ORDER BY timestamp DESC", (farm_id,))
         return [dict(r) for r in cursor.fetchall()]
+
+
+def record_health_log(farm_id: str, animal_id: str, event_type: str, notes: str = "", db_path: Path = DB_PATH) -> Dict[str, Any]:
+    """Records a health check, vaccination, or disease log into health_logs."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO health_logs (farm_id, animal_id, event_type, notes) VALUES (?, ?, ?, ?)",
+            (farm_id, animal_id, event_type, notes)
+        )
+        log_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM health_logs WHERE id = ?", (log_id,))
+        return dict(cursor.fetchone())
 
 
 def get_all_animals(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> List[Dict[str, Any]]:
@@ -474,6 +501,82 @@ def get_flock_ledger_history(
                 (farm_id, limit)
             )
         return [dict(r) for r in cursor.fetchall()]
+
+
+# -------------------------------------------------------------------
+# Ledger Anomaly Management Functions
+# -------------------------------------------------------------------
+
+def save_ledger_anomaly(
+    farm_id: str,
+    severity: str,
+    title: str,
+    metrics: Dict[str, Any],
+    report_text: str,
+    db_path: Path = DB_PATH
+) -> Dict[str, Any]:
+    """Persists a new flock ledger anomaly detection report."""
+    metrics_str = json.dumps(metrics) if isinstance(metrics, dict) else str(metrics)
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO ledger_anomalies (farm_id, severity, title, metrics_json, report_text) VALUES (?, ?, ?, ?, ?)",
+            (farm_id, severity.upper(), title, metrics_str, report_text)
+        )
+        anomaly_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM ledger_anomalies WHERE id = ?", (anomaly_id,))
+        row = cursor.fetchone()
+        res = dict(row)
+        try:
+            res["metrics"] = json.loads(res["metrics_json"])
+        except Exception:
+            res["metrics"] = {}
+        return res
+
+
+def get_latest_ledger_anomaly(
+    farm_id: str = "default_farm",
+    db_path: Path = DB_PATH
+) -> Optional[Dict[str, Any]]:
+    """Retrieves the most recent anomaly evaluation for a farm."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ledger_anomalies WHERE farm_id = ? ORDER BY id DESC LIMIT 1",
+            (farm_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        res = dict(row)
+        try:
+            res["metrics"] = json.loads(res["metrics_json"])
+        except Exception:
+            res["metrics"] = {}
+        return res
+
+
+def get_ledger_anomaly_history(
+    farm_id: str = "default_farm",
+    limit: int = 20,
+    db_path: Path = DB_PATH
+) -> List[Dict[str, Any]]:
+    """Retrieves anomaly history logs for a farm."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ledger_anomalies WHERE farm_id = ? ORDER BY id DESC LIMIT ?",
+            (farm_id, limit)
+        )
+        results = []
+        for r in cursor.fetchall():
+            item = dict(r)
+            try:
+                item["metrics"] = json.loads(item["metrics_json"])
+            except Exception:
+                item["metrics"] = {}
+            results.append(item)
+        return results
 
 
 def get_system_context_summary(farm_id: str = "default_farm", db_path: Path = DB_PATH) -> str:
