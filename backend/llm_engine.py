@@ -144,32 +144,33 @@ def parse_tool_calls(output_text: str) -> Tuple[bool, List[Dict[str, Any]]]:
 
 
 def is_conversational_greeting(query: str) -> bool:
-    """Robust detection strictly for conversational greetings, chit-chat, and polite expressions."""
-    q = query.lower().strip()
-    words = set(re.findall(r'\b\w+\b', q))
-    if not words:
+    """Strictly checks if a short message is purely a greeting, pleasantry, or thank-you expression."""
+    clean = re.sub(r'[^\w\s]', '', query.lower()).strip()
+    if not clean:
         return True
 
-    greeting_words = {
-        'hello', 'hi', 'hey', 'sannu', 'barka', 'kwana', 'morning', 'afternoon',
-        'evening', 'yaya', 'greetings', 'greeting', 'welcome', 'thanks', 'thank',
-        'nagode', 'gode', 'howfar', 'sup', 'yo'
+    # Exact common greeting and pleasantry phrases
+    exact_greetings = {
+        'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+        'how are you', 'how are you doing', 'how is work', 'howfar', 'how far',
+        'sup', 'yo', 'welcome', 'thanks', 'thank you', 'thanks a lot', 'thank you so much',
+        'thank you very much', 'sannu', 'sannu da aiki', 'barka', 'barka da asuba',
+        'barka da rana', 'barka da yamma', 'ina kwana', 'ina wuni', 'yaya dai',
+        'nagode', 'na gode', 'nagode sosai', 'na gode sosai'
     }
-    agri_action_words = {
-        'chicken', 'chickens', 'goat', 'goats', 'cattle', 'cow', 'cows', 'sheep', 'ram', 'pig', 'pigs',
-        'kaji', 'kaza', 'awaki', 'akuya', 'shanu', 'saniya', 'tumaki',
-        'cough', 'coughing', 'sneeze', 'sneezing', 'die', 'dying', 'dead', 'sick', 'sickness', 'disease',
-        'fever', 'limp', 'limping', 'cuta', 'ciwo', 'tari', 'mura', 'zazzabi', 'magani',
-        'blister', 'blisters', 'scab', 'scabs', 'wound', 'wounds', 'pox', 'fungal', 'fungus',
-        'feed', 'housing', 'pen', 'coop', 'vaccine', 'vaccination', 'egg', 'eggs', 'weight',
-        'cost', 'expense', 'spent', 'buy', 'bought', 'naira', 'kudi', 'count', 'number', 'many',
-        'animal', 'animals', 'flock', 'herd', 'livestock'
+    if clean in exact_greetings:
+        return True
+
+    # Short 1-2 word combinations where every word is a greeting token
+    words = clean.split()
+    greeting_tokens = {
+        'hello', 'hi', 'hey', 'sannu', 'barka', 'morning', 'afternoon', 'evening',
+        'welcome', 'thanks', 'thank', 'nagode', 'gode', 'howfar', 'sup', 'yo', 'kwana', 'wuni'
     }
+    if len(words) <= 2 and all(w in greeting_tokens for w in words):
+        return True
 
-    has_greeting = bool(words.intersection(greeting_words)) or 'how far' in q or 'how are you' in q or 'how is work' in q or 'ina kwana' in q
-    has_action = bool(words.intersection(agri_action_words))
-
-    return has_greeting and not has_action
+    return False
 
 
 def handle_fast_intent(query: str, language: str) -> Optional[str]:
