@@ -302,17 +302,10 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
 
     joined_context = "\n\n".join(formatted_context_parts)
 
-    strict_prompt = (
-        "Answer the user's question using ONLY the provided context below. "
-        "If the answer cannot be found in the context, explicitly state that you do not know.\n\n"
-        f"{joined_context}\n\n"
-        f"User Question: {search_query}"
-    )
-
     return {
         "status": "success",
         "search_query": search_query,
-        "context_prompt": strict_prompt,
+        "context_prompt": joined_context,
         "retrieved_chunks": [
             {"filename": c["filename"], "chunk_id": c["chunk_id"], "score": c["score"]}
             for c in chunks

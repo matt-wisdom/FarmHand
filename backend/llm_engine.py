@@ -94,15 +94,21 @@ def get_llm() -> Optional[Llama]:
                 chat_format="chatml",
                 verbose=False
             )
-            # Token bias against '[' and '{' to prevent default tool-calling syntax in Pass 3
-            sq_tokens = _llm_instance.tokenize(b'[')
-            cu_tokens = _llm_instance.tokenize(b'{')
-            _anti_json_logit_bias = {tok: -100.0 for tok in sq_tokens + cu_tokens}
+            # Comprehensive anti-JSON token bias to prevent tool-calling output in Pass 3
+            json_symbols = [
+                '[', ' [', '\n[', '{', ' {', '\n{', '{"', 'function', 'function_name',
+                '"function_name"', 'write_', 'list_', 'register_'
+            ]
+            _anti_json_logit_bias = {}
+            for s in json_symbols:
+                for tok in _llm_instance.tokenize(s.encode('utf-8'), add_bos=False):
+                    _anti_json_logit_bias[tok] = -100.0
 
             # English-mode bias: suppress JSON tokens + Pidgin particles directly in llama.cpp
             pidgin_words = [
                 'dey', ' dey', 'Dey', ' Dey', 'wey', ' wey', 'Wey', 'well-well', ' well-well',
-                'wetin', ' wetin', 'Wetin', 'una', ' una', 'dem', ' dem', 'sabi', ' sabi'
+                'wetin', ' wetin', 'Wetin', 'una', ' una', 'dem', ' dem', 'sabi', ' sabi',
+                'abeg', ' abeg', 'oga', ' oga', 'quick-quick', ' quick-quick'
             ]
             _english_logit_bias = dict(_anti_json_logit_bias)
             for w in pidgin_words:
@@ -280,50 +286,69 @@ def filter_relevant_rag_hits(rag_hits: List[Dict[str, Any]], min_score: float = 
     return filtered
 
 
-def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, norm_lang: str, db_summary: str) -> str:
+def generate_stateless_answer(llm: Llama, context_data: str, user_question: str, norm_lang: str, db_summary: str, messages: Optional[List[Dict[str, str]]] = None) -> str:
     """Pass 3: Natural language synthesis using strictly positive prompting and API Chat Wrapper."""
 
     # Budget context length to prevent exceeding token limits
     safe_context = context_data[:2500].strip() if context_data else "No additional reference documents found."
 
+    is_follow_up = bool(messages and len(messages) > 1)
+
     if norm_lang == "pidgin":
         system_prompt = (
             "You are FarmHand AI, an expert agricultural and veterinary advisor.\n"
-            "Respond to the farmer ONLY in warm, natural Nigerian Pidgin English sentences.\n\n"
+            "Respond to the farmer in warm, helpful, natural Nigerian Pidgin English sentences.\n\n"
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
-            f"REFERENCE KNOWLEDGE BASE & MEMORY:\n{safe_context}\n\n"
+            f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Answer the farmer directly, clearly, and concisely with actionable advice.\n"
-            "- If the knowledge base does not contain specific treatment or surgical instructions, state that detailed records are not available in your records, give safe first-aid and supportive care measures, and recommend calling a veterinarian immediately.\n"
-            "- NEVER use placeholder promises (e.g. do NOT say 'I will guide you' or 'Here are the steps to follow'). Provide your full advice immediately."
+            "- Answer the farmer directly with clear, actionable first-aid and management steps in Pidgin.\n"
+            "- If the situation involves an injury, wound, or illness: explain how to clean the area with clean water/antiseptic, keep it dry, isolate the animal to prevent flies and injury, and recommend consulting a vet for antibiotics or prescription medication.\n"
+            "- If this is a follow-up query (e.g. 'ok?', 'what next?'), provide follow-up monitoring and next care steps without repeating prior answers verbatim.\n"
+            "- If detailed records are not available in the reference context, state that you do not have full records in the database, provide safe first-aid guidelines, and advise calling a veterinarian.\n"
+            "- Do NOT output JSON or function calls.\n"
+            "- NEVER output placeholder promises (e.g. do not say 'I will guide you' or 'I go help you'). Give complete advice immediately."
         )
+        prefill = "For follow-up care and monitoring:\n1." if is_follow_up else "To treat and manage this situation:\n1."
     else:
         system_prompt = (
             "You are FarmHand AI, an expert agricultural and veterinary specialist.\n"
             "Respond to the farmer in clear, professional, standard international English sentences.\n\n"
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
-            f"REFERENCE KNOWLEDGE BASE & MEMORY:\n{safe_context}\n\n"
+            f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Answer the farmer's question directly, clearly, and concisely with actionable advice.\n"
-            "- State specific treatments, medications, active ingredients, dosage guidance, and management steps when present in the reference context.\n"
-            "- If the reference context does NOT contain enough specific details for the condition, explicitly state that you do not have detailed records in your knowledge base, provide standard safe first-aid / supportive care measures, and advise consulting a licensed veterinarian.\n"
-            "- Do NOT use Nigerian Pidgin, slang, or colloquial expressions.\n"
+            "- Answer the farmer's question directly with clear, actionable first-aid, treatment, or management guidance.\n"
+            "- If the situation involves an injury, wound with pus, or illness: detail immediate first-aid steps (e.g. cleaning with mild antiseptic/saline, keeping dry, isolating the animal to prevent flies and further injury), and advise consulting a licensed veterinarian for appropriate antibiotics or medication.\n"
+            "- If this is a follow-up query (e.g. 'ok?', 'what next?'), provide follow-up monitoring, observation tips, and veterinary check-up steps without repeating prior answers verbatim.\n"
+            "- If specific clinical or surgical records are not in the reference documents, explicitly state that detailed records are not available in your knowledge base, provide standard safe first-aid / supportive care measures, and recommend consulting a licensed veterinarian.\n"
+            "- Do NOT use Nigerian Pidgin or slang. Do NOT output JSON or function calls.\n"
             "- NEVER output placeholder promises (e.g. do NOT say 'I will guide you through the steps'). Provide your complete response immediately."
         )
+        prefill = "For follow-up care and monitoring:\n1." if is_follow_up else "To treat and manage this situation:\n1."
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_question}
-    ]
+    # Build ChatML history
+    chatml_parts = [f"<|im_start|>system\n{system_prompt}<|im_end|>"]
+    if messages and len(messages) > 1:
+        for m in messages[-4:-1]:
+            role = m.get("role", "user")
+            content = (m.get("content") or "").strip()
+            if content:
+                chatml_parts.append(f"<|im_start|>{role}\n{content}<|im_end|>")
+        last_user_content = (messages[-1].get("content") or user_question).strip()
+        chatml_parts.append(f"<|im_start|>user\n{last_user_content}<|im_end|>")
+    else:
+        chatml_parts.append(f"<|im_start|>user\n{user_question}<|im_end|>")
+
+    chatml_parts.append(f"<|im_start|>assistant\n{prefill}")
+    raw_prompt = "\n".join(chatml_parts)
 
     # Calculate token headroom dynamically
-    est_prompt_tokens = len(system_prompt + user_question) // 3
+    est_prompt_tokens = len(raw_prompt) // 3
     max_gen_tokens = max(64, min(300, N_CTX - est_prompt_tokens - 100))
 
     bias = _english_logit_bias if norm_lang != "pidgin" else _anti_json_logit_bias
 
-    response = llm.create_chat_completion(
-        messages=messages,
+    response = llm.create_completion(
+        prompt=raw_prompt,
         max_tokens=max_gen_tokens,
         temperature=0.1,
         repeat_penalty=1.15,
@@ -331,7 +356,8 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
         stop=["<|im_end|>", "<|im_start|>"]
     )
 
-    content = response["choices"][0]["message"]["content"].strip()
+    generated_text = response["choices"][0]["text"].strip()
+    content = f"{prefill} {generated_text}".strip()
     return content
 
 
@@ -587,11 +613,11 @@ def chat_completion(
 
     if rag_context:
         print(f"[llm_engine] Running Pass 3 (RAG Synthesis)...")
-        raw_output = generate_stateless_answer(llm, rag_context, router_query_content, norm_lang, farm_summary)
+        raw_output = generate_stateless_answer(llm, rag_context, router_query_content, norm_lang, farm_summary, messages=messages)
     elif tool_results:
         print(f"[llm_engine] Running Pass 3 (Database Synthesis)...")
         db_context = format_database_tool_context(tool_results)
-        raw_output = generate_stateless_answer(llm, db_context, router_query_content, norm_lang, farm_summary)
+        raw_output = generate_stateless_answer(llm, db_context, router_query_content, norm_lang, farm_summary, messages=messages)
     else:
         raw_output = "I couldn't process that command. Could you please rephrase what you need help with?"
 
