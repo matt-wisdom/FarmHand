@@ -113,7 +113,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span class="session-title">{{ th.title || 'Conversation' }}</span>
+          <span class="session-title">{{ th.is_temp ? 'New conversation' : (th.title || 'Conversation') }}</span>
           <button class="session-del-btn" @click.stop="deleteThread(th.id)" title="Delete session">✕</button>
         </div>
       </div>
@@ -686,15 +686,8 @@
         </section>
 
         <!-- VIEW TAB 6: KNOWLEDGE BASE RAG TAB -->
-        <section v-if="currentTab === 'knowledge'" class="view-container" style="padding:20px;">
+        <section v-if="currentTab === 'knowledge'" class="view-container">
           <h2 class="section-heading">Knowledge Base</h2>
-          
-          <!-- Upload Section -->
-          <div style="border:2px dashed #ccc;padding:20px;margin:10px 0;">
-            <p>Upload PDF test</p>
-          </div>
-
-        </section>
           
           <!-- Upload Section -->
           <div class="kb-upload-section">
@@ -1823,27 +1816,26 @@
           isCreatingThread.value = true;
           currentTab.value = 'assistant';
           closeMobileSidebar();
-          try {
-            const res = await fetch('/threads', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ farm_id: activeFarmId.value, title: 'New Chat' })
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const listRes = await fetch(`/threads?farm_id=${activeFarmId.value}`);
-              if (listRes.ok) {
-                const listData = await listRes.json();
-                threads.value = listData.threads || [];
-              }
-              await selectThread(data.thread_id, true);
-              showToast('New Chat Session Created');
-            }
-          } catch (e) {
-            console.error('Error creating new thread:', e);
-          } finally {
-            isCreatingThread.value = false;
-          }
+          
+          // Create a local temporary thread (not saved to DB yet)
+          const tempId = 'temp_' + Date.now();
+          const tempThread = {
+            id: tempId,
+            title: 'New conversation',
+            created_at: new Date().toISOString(),
+            is_temp: true
+          };
+          
+          // Add to local threads list
+          threads.value = [tempThread, ...threads.value];
+          
+          // Select this temp thread
+          activeThreadId.value = tempId;
+          messages.value = [];
+          userInput.value = '';
+          
+          showToast('Start typing to begin new chat...');
+          isCreatingThread.value = false;
         };
 
         const deleteThread = async (threadId) => {
@@ -1880,6 +1872,37 @@
 
           const userText = userInput.value.trim();
           userInput.value = '';
+          
+          // Check if this is a temp thread - need to create it first
+          let threadId = activeThreadId.value;
+          const currentThread = threads.value.find(t => t.id === threadId);
+          
+          if (currentThread && currentThread.is_temp) {
+            // Create the thread in DB first
+            try {
+              const createRes = await fetch('/threads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ farm_id: activeFarmId.value, title: userText.substring(0, 50) })
+              });
+              if (createRes.ok) {
+                const createData = await createRes.json();
+                // Replace temp thread with real one
+                const realThread = {
+                  id: createData.thread_id,
+                  title: userText.substring(0, 50),
+                  created_at: createData.created_at || new Date().toISOString(),
+                  is_temp: false
+                };
+                threads.value = threads.value.map(t => t.id === threadId ? realThread : t);
+                threadId = createData.thread_id;
+                activeThreadId.value = threadId;
+              }
+            } catch (e) {
+              console.error('Error creating thread:', e);
+            }
+          }
+          
           messages.value.push({ role: 'user', content: userText });
           scrollToBottom();
           isSending.value = true;
@@ -1889,7 +1912,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                thread_id: activeThreadId.value,
+                thread_id: threadId,
                 user_input: userText,
                 farm_id: activeFarmId.value,
                 language: selectedLanguage.value
@@ -1986,7 +2009,6 @@
           } else if (tabName === 'telemetry') {
             fetchTelemetry();
           } else if (tabName === 'knowledge') {
-            console.log('Switching to knowledge tab, farm:', activeFarmId.value);
             loadKnowledgeDocuments();
           }
           setTimeout(() => {

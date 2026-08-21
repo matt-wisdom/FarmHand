@@ -106,9 +106,28 @@ def get_llm() -> Optional[Llama]:
 
             # English-mode bias: suppress JSON tokens + Pidgin particles directly in llama.cpp
             pidgin_words = [
-                'dey', ' dey', 'Dey', ' Dey', 'wey', ' wey', 'Wey', 'well-well', ' well-well',
-                'wetin', ' wetin', 'Wetin', 'una', ' una', 'dem', ' dem', 'sabi', ' sabi',
-                'abeg', ' abeg', 'oga', ' oga', 'quick-quick', ' quick-quick'
+                'dey', ' dey', 'Dey', ' Dey', '\ndey', '\nDey',
+                'wey', ' wey', 'Wey', ' Wey', '\nwey', '\nWey',
+                'wetin', ' wetin', 'Wetin', ' Wetin',
+                'una', ' una', 'Una', ' Una',
+                'sabi', ' sabi', 'Sabi', ' Sabi',
+                'abeg', ' abeg', 'Abeg', ' Abeg',
+                'oga', ' oga', 'Oga', ' Oga',
+                'sef', ' sef', 'Sef', ' Sef',
+                'wahala', ' wahala', 'Wahala', ' Wahala',
+                'shey', ' shey', 'Shey', ' Shey',
+                'kuku', ' kuku', 'Kuku', ' Kuku',
+                'comot', ' comot', 'commot', ' commot',
+                'chop', ' chop', 'Chop', ' Chop',
+                'pikin', ' pikin', 'Pikin', ' Pikin',
+                'nau', ' nau', 'Nau', ' Nau',
+                'oya', ' oya', 'Oya', ' Oya',
+                'abi', ' abi', 'Abi', ' Abi',
+                'well-well', ' well-well', 'quick-quick', ' quick-quick', 'small-small', ' small-small',
+                'don', ' don', 'Don', ' Don',
+                'dem', ' dem', 'Dem', ' Dem', '\ndem', '\nDem',
+                'di', ' di', 'Di', ' Di', '\ndi', '\nDi',
+                ' am', '\nam'
             ]
             _english_logit_bias = dict(_anti_json_logit_bias)
             for w in pidgin_words:
@@ -305,30 +324,54 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
             "- Directly and accurately answer the farmer's question using the reference knowledge base.\n"
             "- For feeding & nutrition: explain ingredients, protein needs, local substitutes (e.g. rice bran, fish meal), and preparation steps.\n"
             "- For diseases & symptoms: evaluate symptoms against reference documents, name suspected conditions (e.g. Tetanus / Lockjaw), give supportive first aid, and advise calling a vet.\n"
-            "- For follow-ups: directly answer what the farmer asks (e.g. diagnosis, causes, next steps) without repeating prior answers verbatim.\n"
+            "- For follow-ups: directly answer what the farmer asks without repeating prior answers verbatim.\n"
             "- Do NOT output JSON or function calls.\n"
-            "- NEVER output placeholder promises (e.g. do not say 'I will guide you' or 'I go help you'). Give complete guidance immediately."
+            "- NEVER output placeholder promises. Give complete guidance immediately."
         )
-        prefill = "To help you with this:\n1."
+        prefill = "To help you with this:\n"
+        chatml_parts = [f"<|im_start|>system\n{system_prompt}<|im_end|>"]
     else:
         system_prompt = (
             "You are FarmHand AI, an expert agricultural, livestock, and aquaculture specialist.\n"
-            "Respond to the farmer in clear, professional, standard international English sentences.\n\n"
+            "Language: Standard International English.\n"
+            "Rule: Write ONLY in clear, grammatically correct standard English. Never use Nigerian Pidgin, slang, or colloquial particles.\n\n"
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
             f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Directly and accurately answer the farmer's specific question using the reference knowledge base.\n"
-            "- For feeding & formulation: detail practical ingredients, crude protein percentages, local substitutes, and preparation instructions.\n"
+            "- Directly and accurately answer the farmer's specific question in natural, clear sentences or paragraphs.\n"
+            "- For definitions, illness overviews, or diagnostic queries (e.g. 'what is tetanus in goats', 'what could be the issue?'): explain clearly in informative prose without forcing numbered lists.\n"
+            "- For feeding, formulations, recipes, or multi-step procedures: detail practical ingredients, crude protein percentages, local substitutes, and preparation steps clearly.\n"
             "- For diseases & clinical symptoms: evaluate symptoms against reference documents, identify likely conditions (e.g. Tetanus, Newcastle, Mastitis), provide immediate supportive care, and recommend contacting a licensed veterinarian.\n"
-            "- For diagnostic & follow-up questions (e.g. 'what could be the issue?'): directly explain the suspected condition, cause, or mechanism based on the records without repeating prior answers verbatim.\n"
             "- If specific details are not in the reference records, state knowledge limits clearly and provide safe standard best practices.\n"
-            "- Do NOT use Nigerian Pidgin or slang when language is English. Do NOT output JSON or function calls.\n"
+            "- Do NOT output JSON or function calls.\n"
             "- NEVER output placeholder promises (e.g. do NOT say 'I will guide you through the steps'). Provide your complete response immediately."
         )
-        prefill = "Regarding this:\n1." if is_follow_up else "Here is practical guidance for your farm:\n1."
+        prefill = "Here is the recommended guidance:\n"
+
+        few_shot_1_user = "What is coccidiosis in poultry?"
+        few_shot_1_assistant = (
+            "Coccidiosis is an intestinal disease in poultry caused by microscopic protozoan parasites called coccidia. "
+            "It spreads when birds ingest parasite eggs from contaminated litter, feed, or water, leading to droopiness, "
+            "bloody droppings, and weight loss. Prevention and management involve keeping litter clean and dry, practicing "
+            "biosecurity, and administering anticoccidial medications."
+        )
+
+        few_shot_2_user = "How can I formulate low-cost grower feed for broilers?"
+        few_shot_2_assistant = (
+            "To formulate a low-cost broiler grower feed:\n"
+            "1. Combine local energy sources such as maize or sorghum (50-55%) with protein sources like roasted soybean meal or fish meal (25-30%).\n"
+            "2. Add wheat offal or rice bran (10-15%) for fiber and energy balance.\n"
+            "3. Mix in bone meal (2-3%), limestone (1%), salt (0.3%), and a standard broiler premix with essential vitamins and minerals."
+        )
+        chatml_parts = [
+            f"<|im_start|>system\n{system_prompt}<|im_end|>",
+            f"<|im_start|>user\n{few_shot_1_user}<|im_end|>",
+            f"<|im_start|>assistant\n{few_shot_1_assistant}<|im_end|>",
+            f"<|im_start|>user\n{few_shot_2_user}<|im_end|>",
+            f"<|im_start|>assistant\n{few_shot_2_assistant}<|im_end|>"
+        ]
 
     # Build ChatML history
-    chatml_parts = [f"<|im_start|>system\n{system_prompt}<|im_end|>"]
     if messages and len(messages) > 1:
         for m in messages[-4:-1]:
             role = m.get("role", "user")
@@ -359,7 +402,7 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
     )
 
     generated_text = response["choices"][0]["text"].strip()
-    content = f"{prefill} {generated_text}".strip()
+    content = f"{prefill}{generated_text}".strip()
     return content
 
 
