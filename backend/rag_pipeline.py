@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import faiss
@@ -311,3 +312,113 @@ def query_knowledge_base(search_query: str, top_k: int = 3) -> Dict[str, Any]:
             for c in chunks
         ]
     }
+
+
+# -------------------------------------------------------------------
+# Document Upload Functions
+# -------------------------------------------------------------------
+
+UPLOADS_DIR = BASE_DIR.parent / "data" / "uploads"
+
+
+def add_document_to_knowledge_base(farm_id: str, pdf_path: Path) -> Dict[str, Any]:
+    """
+    Add a PDF document to the farm's knowledge base.
+    
+    Args:
+        farm_id: Farm ID (None for global)
+        pdf_path: Path to the uploaded PDF file
+        
+    Returns:
+        Dict with success status and chunk count
+    """
+    from build_embeddings import add_document_to_vector_store
+    from build_bm25_index import rebuild_bm25_index
+    
+    if not pdf_path.exists():
+        return {"success": False, "error": "File not found"}
+    
+    try:
+        # Add to vector store
+        chunks_added = add_document_to_vector_store(
+            pdf_path=pdf_path,
+            farm_id=farm_id
+        )
+        
+        # Rebuild BM25 index to include new chunks
+        rebuild_bm25_index()
+        
+        return {
+            "success": True,
+            "filename": pdf_path.name,
+            "chunks_added": chunks_added,
+            "farm_id": farm_id
+        }
+    except Exception as e:
+        print(f"[rag_pipeline] Error adding document: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def list_farm_documents(farm_id: str) -> List[Dict[str, Any]]:
+    """List all documents uploaded by a specific farm."""
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT filename, COUNT(*) as chunk_count, MIN(created_at) as first_uploaded
+            FROM document_chunks 
+            WHERE farm_id = ?
+            GROUP BY filename
+            ORDER BY first_uploaded DESC
+            """,
+            (farm_id,)
+        )
+        return [
+            {
+                "filename": row["filename"],
+                "chunk_count": row["chunk_count"],
+                "uploaded_at": row["first_uploaded"]
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_global_documents() -> List[Dict[str, Any]]:
+    """List all global/system documents."""
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT filename, COUNT(*) as chunk_count, MIN(created_at) as first_uploaded
+            FROM document_chunks 
+            WHERE farm_id IS NULL
+            GROUP BY filename
+            ORDER BY first_uploaded DESC
+            """
+        )
+        return [
+            {
+                "filename": row["filename"],
+                "chunk_count": row["chunk_count"],
+                "uploaded_at": row["first_uploaded"]
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def delete_farm_document(farm_id: str, filename: str) -> Dict[str, Any]:
+    """Delete a farm's uploaded document from knowledge base."""
+    from build_embeddings import remove_document_from_vector_store
+    from build_bm25_index import rebuild_bm25_index
+    
+    try:
+        chunks_removed = remove_document_from_vector_store(filename, farm_id)
+        rebuild_bm25_index()
+        
+        return {
+            "success": True,
+            "filename": filename,
+            "chunks_removed": chunks_removed
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

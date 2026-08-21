@@ -421,6 +421,94 @@ def get_farm_telemetry_endpoint(farm_id: str):
 
 
 # -------------------------------------------------------------------
+# Knowledge Base Upload Endpoints
+# -------------------------------------------------------------------
+
+from rag_pipeline import (
+    add_document_to_knowledge_base,
+    list_farm_documents,
+    get_global_documents,
+    delete_farm_document,
+    UPLOADS_DIR
+)
+from fastapi import UploadFile, File
+
+
+@app.post("/api/farms/{farm_id}/knowledge/upload", tags=["Knowledge Base"])
+async def upload_knowledge_document(
+    farm_id: str,
+    file: UploadFile = File(...)
+):
+    """POST /api/farms/{farm_id}/knowledge/upload: Upload a PDF to farm's knowledge base."""
+    if not file.filename.lower().endswith('.pdf'):
+        return {"success": False, "error": "Only PDF files are supported"}
+    
+    # Create farm's upload directory
+    farm_upload_dir = UPLOADS_DIR / farm_id
+    farm_upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save uploaded file
+    file_path = farm_upload_dir / file.filename
+    
+    try:
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Add to knowledge base
+        result = add_document_to_knowledge_base(farm_id, file_path)
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "filename": file.filename,
+                "chunks_added": result.get("chunks_added", 0),
+                "message": f"Successfully added {result.get('chunks_added', 0)} chunks to knowledge base"
+            }
+        else:
+            # Clean up file on failure
+            if file_path.exists():
+                file_path.unlink()
+            return {"success": False, "error": result.get("error", "Unknown error")}
+            
+    except Exception as e:
+        # Clean up file on exception
+        if file_path.exists():
+            file_path.unlink()
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/farms/{farm_id}/knowledge/documents", tags=["Knowledge Base"])
+def list_farm_knowledge_documents(farm_id: str):
+    """GET /api/farms/{farm_id}/knowledge/documents: List farm's uploaded documents."""
+    farm_docs = list_farm_documents(farm_id)
+    global_docs = get_global_documents()
+    
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "farm_documents": farm_docs,
+        "global_documents": global_docs,
+        "total_farm_documents": len(farm_docs),
+        "total_global_documents": len(global_docs)
+    }
+
+
+@app.delete("/api/farms/{farm_id}/knowledge/documents/{filename}", tags=["Knowledge Base"])
+def delete_farm_knowledge_document(farm_id: str, filename: str):
+    """DELETE /api/farms/{farm_id}/knowledge/documents/{filename}: Delete a farm's uploaded document."""
+    # Also delete the file from disk
+    file_path = UPLOADS_DIR / farm_id / filename
+    
+    result = delete_farm_document(farm_id, filename)
+    
+    if result.get("success") and file_path.exists():
+        file_path.unlink()
+    
+    return result
+
+
+# -------------------------------------------------------------------
 def normalize_language(lang: Optional[str]) -> str:
     if not lang:
         return "english"

@@ -137,15 +137,16 @@ def process_knowledge_base():
                 row_id = total_chunks_processed + idx + 1
                 cursor.execute(
                     """
-                    INSERT INTO document_chunks (id, filename, chunk_id, text, metadata_json)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO document_chunks (id, filename, farm_id, chunk_id, text, metadata_json)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row_id,
                         meta["filename"],
+                        meta.get("farm_id"),  # None for global docs
                         meta["chunk_id"],
                         meta["raw_text"],
-                        json.dumps({"filename": meta["filename"], "chunk_id": meta["chunk_id"]})
+                        json.dumps({"filename": meta["filename"], "farm_id": meta.get("farm_id"), "chunk_id": meta["chunk_id"]})
                     )
                 )
 
@@ -182,6 +183,191 @@ def process_knowledge_base():
     faiss.write_index(index, str(INDEX_PATH))
     print(f"\n[build_embeddings] SUCCESS: Saved FAISS index to {INDEX_PATH} (total vectors: {index.ntotal}, dimension: {dimension}).")
     print(f"[build_embeddings] Ingested {total_chunks_processed} total chunks into SQLite database {DB_PATH}.")
+
+
+# -------------------------------------------------------------------
+# Reusable functions for single-document processing
+# -------------------------------------------------------------------
+
+def add_document_to_vector_store(
+    pdf_path: Path,
+    farm_id: str = None,
+    index_path: Path = INDEX_PATH,
+    chunk_size: int = CHUNK_SIZE_CHARS,
+    overlap: int = CHUNK_OVERLAP_CHARS
+) -> int:
+    """
+    Add a single PDF document to the existing FAISS vector store and SQLite.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        farm_id: Farm ID for farm-specific documents (None for global/system)
+        index_path: Path to the FAISS index file
+        chunk_size: Characters per chunk
+        overlap: Character overlap between chunks
+        
+    Returns:
+        Number of chunks added
+    """
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
+    
+    print(f"[build_embeddings] Loading embedding model...")
+    embedding_model = load_embedding_model()
+    dimension = 384
+    
+    # Load existing index or create new
+    if index_path.exists():
+        index = faiss.read_index(str(index_path))
+    else:
+        index = faiss.IndexFlatIP(dimension)
+    
+    # Get current max ID in database
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(MAX(id), 0) FROM document_chunks")
+        start_id = cursor.fetchone()[0]
+    
+    # Extract and chunk text
+    raw_text = extract_text_from_pdf(pdf_path)
+    chunks = chunk_text(raw_text, chunk_size=chunk_size, overlap=overlap)
+    
+    if not chunks:
+        print("[build_embeddings] No text extracted from PDF")
+        return 0
+    
+    filename = pdf_path.name
+    
+    # Process in small batches
+    BATCH_SIZE = 32
+    batch_passages = []
+    batch_metadata = []
+    total_added = 0
+    next_id = start_id + 1
+    
+    for chunk_idx, chunk_content in enumerate(chunks):
+        formatted_passage = f"passage: {chunk_content}"
+        batch_passages.append(formatted_passage)
+        batch_metadata.append({
+            "filename": filename,
+            "farm_id": farm_id,
+            "chunk_id": chunk_idx,
+            "raw_text": chunk_content
+        })
+        
+        if len(batch_passages) >= BATCH_SIZE:
+            # Embed batch
+            embeddings_gen = embedding_model.embed(batch_passages)
+            batch_np = np.array(list(embeddings_gen), dtype=np.float32)
+            faiss.normalize_L2(batch_np)
+            index.add(batch_np)
+            
+            # Save to database
+            with get_db_connection(DB_PATH) as conn:
+                cursor = conn.cursor()
+                for idx, meta in enumerate(batch_metadata):
+                    cursor.execute(
+                        """
+                        INSERT INTO document_chunks (filename, farm_id, chunk_id, text, metadata_json)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            meta["filename"],
+                            meta["farm_id"],
+                            meta["chunk_id"],
+                            meta["raw_text"],
+                            json.dumps({"filename": meta["filename"], "farm_id": farm_id, "chunk_id": meta["chunk_id"]})
+                        )
+                    )
+            
+            total_added += len(batch_passages)
+            batch_passages = []
+            batch_metadata = []
+    
+    # Flush remaining
+    if batch_passages:
+        embeddings_gen = embedding_model.embed(batch_passages)
+        batch_np = np.array(list(embeddings_gen), dtype=np.float32)
+        faiss.normalize_L2(batch_np)
+        index.add(batch_np)
+        
+        with get_db_connection(DB_PATH) as conn:
+            cursor = conn.cursor()
+            for idx, meta in enumerate(batch_metadata):
+                cursor.execute(
+                    """
+                    INSERT INTO document_chunks (filename, farm_id, chunk_id, text, metadata_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        meta["filename"],
+                        meta["farm_id"],
+                        meta["chunk_id"],
+                        meta["raw_text"],
+                        json.dumps({"filename": meta["filename"], "farm_id": farm_id, "chunk_id": meta["chunk_id"]})
+                    )
+                )
+        
+        total_added += len(batch_passages)
+    
+    # Save updated index
+    faiss.write_index(index, str(index_path))
+    print(f"[build_embeddings] Added {total_added} chunks from {filename} to vector store (farm_id={farm_id})")
+    
+    return total_added
+
+
+def remove_document_from_vector_store(filename: str, farm_id: str = None) -> int:
+    """
+    Remove a document's chunks from the vector store.
+    
+    Args:
+        filename: Name of the file to remove
+        farm_id: Farm ID (None for global)
+        
+    Returns:
+        Number of chunks removed
+    """
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        
+        # Find chunks to delete
+        if farm_id:
+            cursor.execute(
+                "SELECT id FROM document_chunks WHERE filename = ? AND farm_id = ?",
+                (filename, farm_id)
+            )
+        else:
+            cursor.execute(
+                "SELECT id FROM document_chunks WHERE filename = ? AND farm_id IS NULL",
+                (filename,)
+            )
+        
+        ids_to_delete = [row[0] for row in cursor.fetchall()]
+        
+        if not ids_to_delete:
+            return 0
+        
+        # Delete from database
+        if farm_id:
+            cursor.execute(
+                "DELETE FROM document_chunks WHERE filename = ? AND farm_id = ?",
+                (filename, farm_id)
+            )
+        else:
+            cursor.execute(
+                "DELETE FROM document_chunks WHERE filename = ? AND farm_id IS NULL",
+                (filename,)
+            )
+        
+        conn.commit()
+        
+        # For FAISS, we'd need to rebuild the index to truly remove vectors
+        # For now, we just remove from DB - the vectors remain but won't be queried
+        # TODO: Rebuild index periodically or use IndexIDMap for proper deletion
+        
+    print(f"[build_embeddings] Removed {len(ids_to_delete)} chunks for {filename}")
+    return len(ids_to_delete)
 
 
 if __name__ == "__main__":

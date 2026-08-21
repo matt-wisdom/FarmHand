@@ -1635,4 +1635,152 @@ html, body {
   color: var(--text-muted);
 }
 
+/* ===================================================================
+   Knowledge Base Tab
+   =================================================================== */
+.kb-upload-section {
+  margin-bottom: 20px;
+}
+
+.kb-upload-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.kb-upload-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.kb-upload-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-upload-text strong {
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.kb-upload-text span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.kb-upload-btn {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.kb-documents-section {
+  margin-bottom: 20px;
+}
+
+.kb-doc-group {
+  margin-bottom: 16px;
+}
+
+.kb-doc-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.kb-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.kb-doc-global {
+  opacity: 0.7;
+  background: var(--bg-hover);
+}
+
+.kb-doc-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+
+.kb-doc-name {
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.kb-doc-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.kb-doc-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.kb-doc-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.kb-empty,
+.kb-loading {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Search Results */
+.search-result-card {
+  margin-bottom: 12px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.result-filename {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.result-text {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
 

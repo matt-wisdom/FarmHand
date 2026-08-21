@@ -123,11 +123,19 @@ def init_db(db_path: Path = DB_PATH):
             CREATE TABLE IF NOT EXISTS document_chunks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename TEXT NOT NULL,
+                farm_id TEXT,  -- NULL = global/system, otherwise farm-specific upload
                 chunk_id INTEGER NOT NULL,
                 text TEXT NOT NULL,
-                metadata_json TEXT
+                metadata_json TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Add index for farm_id filtering (run once)
+        try:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_chunks_farm_id ON document_chunks(farm_id)")
+        except Exception:
+            pass
 
         # Flock Ledger Table (Append-only time-series animal count ledger)
         cursor.execute("""
@@ -181,6 +189,17 @@ def init_db(db_path: Path = DB_PATH):
                 cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN farm_id TEXT DEFAULT 'default_farm'")
             except sqlite3.OperationalError:
                 pass  # Column already exists
+
+        # Migrate document_chunks table
+        try:
+            cursor.execute("ALTER TABLE document_chunks ADD COLUMN farm_id TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE document_chunks ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         # Migration complete
 

@@ -5,6 +5,7 @@ Run this after rebuilding FAISS embeddings.
 """
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -49,6 +50,50 @@ def build_bm25_index():
     retriever.save(str(save_path))
 
     print(f"[build_bm25] Index saved to {save_path}")
+
+
+def add_to_bm25_index(texts: List[str]) -> bool:
+    """
+    Add new texts to the BM25 index.
+    
+    Note: bm25s doesn't support incremental adding, so we rebuild the index.
+    This is called after adding new documents to the database.
+    
+    Args:
+        texts: List of text chunks to add
+        
+    Returns:
+        True if successful
+    """
+    if not texts:
+        return True
+    
+    print(f"[build_bm25] Adding {len(texts)} texts to index (rebuilding)...")
+    
+    # Load existing corpus
+    with get_db_connection(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT text FROM document_chunks")
+        corpus = [row["text"] for row in cursor.fetchall()]
+    
+    # Rebuild index
+    stemmer = Stemmer.Stemmer("english")
+    corpus_tokens = bm25s.tokenize(corpus, stemmer=stemmer)
+    
+    retriever = bm25s.BM25()
+    retriever.index(corpus_tokens)
+    
+    save_path = MODELS_DIR / "bm25_model"
+    save_path.mkdir(parents=True, exist_ok=True)
+    retriever.save(str(save_path))
+    
+    print(f"[build_bm25] Index rebuilt with {len(corpus)} documents")
+    return True
+
+
+def rebuild_bm25_index() -> bool:
+    """Rebuild the entire BM25 index from database."""
+    return build_bm25_index() is None or True
 
 
 if __name__ == "__main__":

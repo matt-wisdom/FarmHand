@@ -686,16 +686,115 @@
         </section>
 
         <!-- VIEW TAB 6: KNOWLEDGE BASE RAG TAB -->
-        <section v-if="currentTab === 'knowledge'" class="view-container">
-          <h2 class="section-heading">Agricultural Vector Knowledge Base</h2>
-          <div class="search-box-card">
-            <input type="text" class="form-control" placeholder="Search farm manuals..." v-model="ragQuery" @keyup.enter="searchRAG">
-            <button class="btn-green" @click="searchRAG" :disabled="isSearchingRAG">Search PDF Manuals</button>
+        <section v-if="currentTab === 'knowledge'" class="view-container" style="padding:20px;">
+          <h2 class="section-heading">Knowledge Base</h2>
+          
+          <!-- Upload Section -->
+          <div style="border:2px dashed #ccc;padding:20px;margin:10px 0;">
+            <p>Upload PDF test</p>
           </div>
 
+        </section>
+          
+          <!-- Upload Section -->
+          <div class="kb-upload-section">
+            <div class="kb-upload-card">
+              <div class="kb-upload-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </div>
+              <div class="kb-upload-text">
+                <strong>Upload PDF Documents</strong>
+                <span>Add custom farming guides, veterinary manuals, or treatment protocols</span>
+              </div>
+              <label class="btn-green kb-upload-btn">
+                <input type="file" accept=".pdf" @change="uploadKnowledgeDocument" :disabled="isUploading" style="display:none">
+                {{ isUploading ? 'Uploading...' : 'Choose PDF' }}
+              </label>
+            </div>
+          </div>
+
+          <!-- Document Lists -->
+          <div class="kb-documents-section" v-if="!isLoadingDocuments && (knowledgeDocuments.farm.length > 0 || knowledgeDocuments.global.length > 0)">
+            
+            <!-- Farm Documents -->
+            <div class="kb-doc-group" v-if="knowledgeDocuments.farm.length > 0">
+              <h3 class="kb-doc-heading">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                </svg>
+                Your Documents ({{ knowledgeDocuments.farm.length }})
+              </h3>
+              <div class="kb-doc-list">
+                <div v-for="doc in knowledgeDocuments.farm" :key="doc.filename" class="kb-doc-item">
+                  <div class="kb-doc-info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span class="kb-doc-name">{{ doc.filename }}</span>
+                    <span class="kb-doc-meta">{{ doc.chunk_count }} chunks</span>
+                  </div>
+                  <button class="kb-doc-delete" @click="deleteKnowledgeDocument(doc.filename)" title="Delete document">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Global Documents -->
+            <div class="kb-doc-group" v-if="knowledgeDocuments.global.length > 0">
+              <h3 class="kb-doc-heading">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                Built-in Knowledge ({{ knowledgeDocuments.global.length }})
+              </h3>
+              <div class="kb-doc-list">
+                <div v-for="doc in knowledgeDocuments.global" :key="doc.filename" class="kb-doc-item kb-doc-global">
+                  <div class="kb-doc-info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span class="kb-doc-name">{{ doc.filename }}</span>
+                    <span class="kb-doc-meta">{{ doc.chunk_count }} chunks</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="kb-empty" v-else-if="!isLoadingDocuments">
+            <p>No documents uploaded yet. Upload PDFs above to add custom knowledge.</p>
+          </div>
+
+          <!-- Loading -->
+          <div class="kb-loading" v-else-if="isLoadingDocuments">
+            <p>Loading documents...</p>
+          </div>
+
+          <!-- Search Section -->
+          <div class="search-box-card" style="margin-top: 24px;">
+            <input type="text" class="form-control" placeholder="Search all knowledge..." v-model="ragQuery" @keyup.enter="searchRAG">
+            <button class="btn-green" @click="searchRAG" :disabled="isSearchingRAG">
+              {{ isSearchingRAG ? 'Searching...' : 'Search' }}
+            </button>
+          </div>
+
+          <!-- Search Results -->
           <div v-if="searchResults.length > 0" class="search-results-list">
             <div v-for="(r, idx) in searchResults" :key="idx" class="search-result-card">
-              <div class="result-filename">Source: {{ r.filename }} (Score: {{ r.score?.toFixed(3) }})</div>
+              <div class="result-filename">Source: {{ r.filename }}</div>
               <div class="result-text">{{ r.text }}</div>
             </div>
           </div>
@@ -1235,6 +1334,10 @@
         const ragQuery = ref('');
         const searchResults = ref([]);
         const isSearchingRAG = ref(false);
+        const knowledgeDocuments = ref({ farm: [], global: [] });
+        const isLoadingDocuments = ref(false);
+        const isUploading = ref(false);
+        const uploadProgress = ref(0);
 
         // Computed
         const activeFarm = computed(() => {
@@ -1571,6 +1674,119 @@
           ]);
         };
 
+        // Knowledge Base Functions
+        const loadKnowledgeDocuments = async () => {
+          if (!activeFarmId.value) return;
+          isLoadingDocuments.value = true;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/knowledge/documents`);
+            if (res.ok) {
+              const data = await res.json();
+              knowledgeDocuments.value = {
+                farm: data.farm_documents || [],
+                global: data.global_documents || []
+              };
+            }
+          } catch (e) {
+            console.error('Error loading knowledge documents:', e);
+          } finally {
+            isLoadingDocuments.value = false;
+          }
+        };
+
+        const uploadKnowledgeDocument = async (event) => {
+          const file = event.target.files?.[0];
+          if (!file || !activeFarmId.value) return;
+          
+          if (!file.name.toLowerCase().endsWith('.pdf')) {
+            showToast('Only PDF files are supported');
+            return;
+          }
+
+          isUploading.value = true;
+          uploadProgress.value = 0;
+
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch(`/api/farms/${activeFarmId.value}/knowledge/upload`, {
+              method: 'POST',
+              body: formData
+            });
+
+            const data = await res.json();
+            
+            if (data.success) {
+              showToast(`Uploaded ${file.name} (${data.chunks_added} chunks)`);
+              await loadKnowledgeDocuments();
+            } else {
+              showToast('Upload failed: ' + (data.error || 'Unknown error'));
+            }
+          } catch (e) {
+            console.error('Error uploading document:', e);
+            showToast('Upload failed');
+          } finally {
+            isUploading.value = false;
+            uploadProgress.value = 0;
+            event.target.value = '';
+          }
+        };
+
+        const deleteKnowledgeDocument = async (filename) => {
+          if (!activeFarmId.value || !confirm(`Delete "${filename}"?`)) return;
+
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/knowledge/documents/${filename}`, {
+              method: 'DELETE'
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+              showToast(`Deleted ${filename}`);
+              await loadKnowledgeDocuments();
+            } else {
+              showToast('Delete failed: ' + (data.error || 'Unknown error'));
+            }
+          } catch (e) {
+            console.error('Error deleting document:', e);
+            showToast('Delete failed');
+          }
+        };
+
+        const searchRAG = async () => {
+          if (!ragQuery.value.trim() || isSearchingRAG.value) return;
+          isSearchingRAG.value = true;
+          try {
+            const res = await fetch('/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: ragQuery.value,
+                farm_id: activeFarmId.value,
+                language: selectedLanguage.value
+              })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.retrieved_chunks && data.retrieved_chunks.length > 0) {
+                searchResults.value = data.retrieved_chunks.map(c => ({
+                  filename: c.filename,
+                  text: c.text || '',
+                  score: c.score
+                }));
+              } else {
+                searchResults.value = [];
+              }
+            }
+          } catch (e) {
+            console.error('Error searching RAG:', e);
+            searchResults.value = [];
+          } finally {
+            isSearchingRAG.value = false;
+          }
+        };
+
         const fetchThreads = async () => {
           try {
             const res = await fetch(`/threads?farm_id=${activeFarmId.value}`);
@@ -1769,6 +1985,9 @@
             fetchExpenditures();
           } else if (tabName === 'telemetry') {
             fetchTelemetry();
+          } else if (tabName === 'knowledge') {
+            console.log('Switching to knowledge tab, farm:', activeFarmId.value);
+            loadKnowledgeDocuments();
           }
           setTimeout(() => {
             isLoading.value = false;
@@ -1911,6 +2130,12 @@
           ragQuery,
           searchResults,
           isSearchingRAG,
+          knowledgeDocuments,
+          isLoadingDocuments,
+          isUploading,
+          loadKnowledgeDocuments,
+          uploadKnowledgeDocument,
+          deleteKnowledgeDocument,
           totalExpenditures,
           toggleMobileSidebar,
           closeMobileSidebar,
