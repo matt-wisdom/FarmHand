@@ -1783,4 +1783,256 @@ html, body {
   line-height: 1.5;
 }
 
+/* ==========================================================================
+   Advisory Report Modal (Flock Health & Anomaly Diagnostics)
+   ========================================================================== */
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.advisory-modal-card {
+  max-width: 740px !important;
+  width: 95% !important;
+  max-height: 88vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-green) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35) !important;
+  overflow: hidden !important;
+  backdrop-filter: blur(20px) !important;
+}
+
+.advisory-hero-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.advisory-hero-badge.critical {
+  background: rgba(225, 29, 72, 0.12);
+  border: 1.5px solid rgba(225, 29, 72, 0.4);
+  color: var(--accent-rose);
+  box-shadow: 0 0 16px rgba(225, 29, 72, 0.22);
+}
+
+.advisory-hero-badge.warning {
+  background: rgba(217, 119, 6, 0.12);
+  border: 1.5px solid rgba(217, 119, 6, 0.4);
+  color: var(--accent-amber);
+  box-shadow: 0 0 16px rgba(217, 119, 6, 0.22);
+}
+
+.advisory-hero-badge.normal {
+  background: var(--accent-green-light);
+  border: 1.5px solid var(--border-green);
+  color: var(--accent-green);
+}
+
+.advisory-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.advisory-modal-body {
+  overflow-y: auto;
+  padding: 22px 28px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.advisory-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.advisory-stat-box {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.advisory-stat-box-lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.advisory-stat-box-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.advisory-report-prose {
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--text-main);
+}
+
+.advisory-report-prose h1,
+.advisory-report-prose h2,
+.advisory-report-prose h3,
+.advisory-report-prose h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-main);
+  margin-top: 18px;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+.advisory-report-prose h1:first-child,
+.advisory-report-prose h2:first-child,
+.advisory-report-prose h3:first-child {
+  margin-top: 0;
+}
+
+.advisory-report-prose h2 {
+  font-size: 1.15rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.advisory-report-prose h3 {
+  font-size: 1.02rem;
+  color: var(--accent-green);
+}
+
+.advisory-report-prose p {
+  margin-bottom: 12px;
+}
+
+.advisory-report-prose p:last-child {
+  margin-bottom: 0;
+}
+
+.advisory-report-prose ul,
+.advisory-report-prose ol {
+  margin: 10px 0 14px 22px;
+}
+
+.advisory-report-prose li {
+  margin-bottom: 6px;
+}
+
+.advisory-report-prose strong {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.advisory-report-prose blockquote {
+  border-left: 3px solid var(--accent-green);
+  background: var(--accent-green-light);
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  margin: 14px 0;
+  font-size: 0.88rem;
+}
+
+.advisory-report-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 0.86rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.advisory-report-prose th,
+.advisory-report-prose td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.advisory-report-prose th {
+  background: var(--bg-tertiary);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.advisory-diagnostics-box {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.advisory-diagnostics-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diagnostic-item-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.diagnostic-item-card:last-child {
+  margin-bottom: 0;
+}
+
+.diagnostic-item-card:hover {
+  border-color: var(--border-green);
+}
+
+.diagnostic-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagnostic-item-type {
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.diagnostic-item-desc {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+
 

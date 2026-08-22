@@ -568,13 +568,16 @@
               <span class="badge badge-green">NORMAL</span>
               <span>Flock baseline stable. No anomalies detected.</span>
             </div>
-            <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
-              {{ isAnalyzingAnomaly ? 'Scanning...' : 'Run Anomaly Scan' }}
-            </button>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-sm btn-outline-muted" @click="openAnomalyModal" v-if="latestAnomaly.report_text">View Report</button>
+              <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
+                {{ isAnalyzingAnomaly ? 'Scanning...' : 'Run Anomaly Scan' }}
+              </button>
+            </div>
           </div>
 
           <!-- Active Clinical Observations & Farm Memory Section -->
-          <div v-if="farmMemories.length > 0" style="margin-bottom: 16px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
+          <div v-if="farmMemories.length > 0" style="margin-bottom: 16px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <div style="display: flex; align-items: center; gap: 8px; font-size: 0.84rem; font-weight: 700; color: var(--text-main);">
                 <span>Active Clinical Observations</span>
@@ -583,7 +586,7 @@
               <button class="btn-sm btn-outline-muted" style="font-size: 0.76rem;" @click="openAddMemoryModal">+ Note Observation</button>
             </div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div v-for="mem in farmMemories" :key="mem.id" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.83rem; padding: 6px 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">
+              <div v-for="mem in farmMemories" :key="mem.id" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.83rem; padding: 6px 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-subtle);">
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                   <span class="badge" :class="mem.status === 'active' ? 'badge-amber' : 'badge-green'">{{ mem.species }} ({{ mem.category }})</span>
                   <span :style="{ textDecoration: mem.status === 'resolved' ? 'line-through' : 'none', color: mem.status === 'resolved' ? 'var(--text-muted)' : 'var(--text-main)' }">{{ mem.observation }}</span>
@@ -1056,36 +1059,113 @@
 
     <!-- MODAL: ANOMALY ADVISORY REPORT -->
     <div v-if="showAnomalyModal" class="modal-overlay" @click.self="showAnomalyModal = false">
-      <div class="modal-card" style="max-width: 680px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
-        <div class="modal-header-bar" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
-          <div>
-            <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700;">Flock Health & Anomaly Report</h3>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
-              Generated: {{ latestAnomaly ? latestAnomaly.created_at : '' }} — 
+      <div class="modal-card advisory-modal-card">
+        <!-- Hero Header -->
+        <div class="modal-header-hero">
+          <div class="hero-icon-badge advisory-hero-badge" :class="{
+            'critical': latestAnomaly && latestAnomaly.severity === 'CRITICAL',
+            'warning': latestAnomaly && latestAnomaly.severity === 'WARNING',
+            'normal': !latestAnomaly || latestAnomaly.severity === 'NORMAL'
+          }">
+            <!-- Critical Icon -->
+            <svg v-if="latestAnomaly && latestAnomaly.severity === 'CRITICAL'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <!-- Warning Icon -->
+            <svg v-else-if="latestAnomaly && latestAnomaly.severity === 'WARNING'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <!-- Normal Check Shield -->
+            <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <polyline points="9 12 11 14 15 10"></polyline>
+            </svg>
+          </div>
+
+          <div class="hero-text-content">
+            <h3 class="hero-title">{{ latestAnomaly?.title || 'Flock Health & Anomaly Advisory' }}</h3>
+            <div class="advisory-meta-row">
               <span class="badge" :class="{
                 'badge-rose': latestAnomaly && latestAnomaly.severity === 'CRITICAL',
                 'badge-amber': latestAnomaly && latestAnomaly.severity === 'WARNING',
-                'badge-green': latestAnomaly && latestAnomaly.severity === 'NORMAL'
+                'badge-green': !latestAnomaly || latestAnomaly.severity === 'NORMAL'
               }">{{ latestAnomaly ? latestAnomaly.severity : 'NORMAL' }}</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);" v-if="latestAnomaly?.created_at">
+                • {{ latestAnomaly.created_at.slice(0, 16) }}
+              </span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">
+                • {{ activeFarm?.name || 'Active Farm' }}
+              </span>
             </div>
           </div>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAnomalyModal = false">✕</button>
+
+          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAnomalyModal = false" title="Close report">✕</button>
         </div>
 
-        <div class="modal-body-content" style="overflow-y: auto; padding: 16px 0; font-size: 0.9rem; line-height: 1.6; color: var(--text-main); flex: 1;">
-          <div v-html="renderedAnomalyReport" style="white-space: pre-wrap; font-family: inherit;"></div>
+        <!-- Scrollable Modal Body -->
+        <div class="advisory-modal-body">
+          <!-- Summary Metric Strip -->
+          <div class="advisory-stats-strip">
+            <div class="advisory-stat-box">
+              <span class="advisory-stat-box-lbl">Flock Status</span>
+              <span class="advisory-stat-box-val" :style="{
+                color: latestAnomaly?.severity === 'CRITICAL' ? 'var(--accent-rose)' : (latestAnomaly?.severity === 'WARNING' ? 'var(--accent-amber)' : 'var(--accent-green)')
+              }">{{ latestAnomaly?.severity === 'CRITICAL' ? 'Critical Alert' : (latestAnomaly?.severity === 'WARNING' ? 'Warning Condition' : 'Healthy Baseline') }}</span>
+            </div>
+            <div class="advisory-stat-box">
+              <span class="advisory-stat-box-lbl">Total Flock Balance</span>
+              <span class="advisory-stat-box-val">{{ totalFlockSize }} heads</span>
+            </div>
+            <div class="advisory-stat-box">
+              <span class="advisory-stat-box-lbl">Diagnostic Engine</span>
+              <span class="advisory-stat-box-val" style="font-size: 0.86rem;">Rules & ML Isolation Forest</span>
+            </div>
+          </div>
 
-          <div v-if="latestAnomaly && latestAnomaly.metrics && latestAnomaly.metrics.deterministic_issues && latestAnomaly.metrics.deterministic_issues.length > 0" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-            <h4 style="margin: 0 0 10px 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">
-              Triggered Rule Diagnostics
-            </h4>
-            <div v-for="(iss, idx) in latestAnomaly.metrics.deterministic_issues" :key="idx" style="margin-bottom: 8px; font-size: 0.85rem; padding: 8px 12px; background: var(--bg-hover); border-radius: 4px;">
-              <strong style="color: var(--text-main);">[{{ iss.severity }}] {{ iss.type }}</strong>: {{ iss.description }}
+          <!-- Structured Report Markdown Content -->
+          <div v-if="renderedAnomalyReport" class="advisory-report-prose" v-html="renderedAnomalyReport"></div>
+          <div v-else style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+            No anomaly report text generated yet. Click 'Re-Scan Flock' to evaluate baseline health.
+          </div>
+
+          <!-- Triggered Rule Diagnostics Card -->
+          <div v-if="latestAnomaly && latestAnomaly.metrics && latestAnomaly.metrics.deterministic_issues && latestAnomaly.metrics.deterministic_issues.length > 0" class="advisory-diagnostics-box">
+            <div class="advisory-diagnostics-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span>Triggered Diagnostic Rules</span>
+            </div>
+            <div v-for="(iss, idx) in latestAnomaly.metrics.deterministic_issues" :key="idx" class="diagnostic-item-card">
+              <div class="diagnostic-item-top">
+                <span class="badge" :class="{
+                  'badge-rose': iss.severity === 'CRITICAL',
+                  'badge-amber': iss.severity === 'WARNING',
+                  'badge-green': iss.severity === 'INFO' || iss.severity === 'NORMAL'
+                }">{{ iss.severity }}</span>
+                <span class="diagnostic-item-type">{{ iss.type }}</span>
+              </div>
+              <p class="diagnostic-item-desc">{{ iss.description }}</p>
             </div>
           </div>
         </div>
 
-        <div class="modal-footer-bar" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <!-- Modal Footer Bar -->
+        <div class="modal-footer-bar" style="justify-content: space-between; align-items: center;">
+          <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly" style="display: flex; align-items: center; gap: 6px;">
+            <svg v-if="isAnalyzingAnomaly" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+              <line x1="12" y1="2" x2="12" y2="6"></line>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+              <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+            </svg>
+            <span>{{ isAnalyzingAnomaly ? 'Scanning Flock...' : '↻ Re-Scan Flock' }}</span>
+          </button>
           <button class="btn-secondary-green" @click="showAnomalyModal = false">Close</button>
         </div>
       </div>
