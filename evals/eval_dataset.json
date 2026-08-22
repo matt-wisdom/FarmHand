@@ -1,0 +1,943 @@
+{
+  "version": "2.0",
+  "description": "FarmHand AI Benchmark & Evaluation Suite covering Veterinary Disease Definitions, Clinical Triage, Livestock Sales, Flock Ledger Headcounts, Financial Expenditures, Farm Setup Memory, Feed Formulations, Agronomy, Multi-Turn Diagnostics, and Bilingual Fidelity.",
+  "evals": [
+    {
+      "id": "eval_vet_01_goat_tetanus_definition_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Direct overview, pathogen, transmission, and symptoms of tetanus in goats without surgical confusion.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "what is tetanus in goats"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "tetanus",
+        "bacteria",
+        "wound",
+        "stiff"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well",
+        "poultry",
+        "deworming with levonorrine"
+      ],
+      "prose_required": true,
+      "no_forced_list": true
+    },
+    {
+      "id": "eval_vet_02_goat_tetanus_short_query_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Direct definitional response to concise query 'tetanus in goats'.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "tetanus in goats"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "tetanus",
+        "goat",
+        "bacteria"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well",
+        "poultry",
+        "Tetracycline is the recommended antibiotic for wound treatment in goats, especially post-surgical"
+      ],
+      "prose_required": true
+    },
+    {
+      "id": "eval_vet_03_poultry_coccidiosis_def_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Definition, cause, and clinical signs of coccidiosis in poultry.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "what is coccidiosis in poultry"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "coccidiosis",
+        "droppings",
+        "litter"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well",
+        "goat"
+      ],
+      "prose_required": true
+    },
+    {
+      "id": "eval_vet_04_poultry_newcastle_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Clinical symptom evaluation of Newcastle disease in chickens.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "My chickens are twisting their necks, coughing and having greenish diarrhea. What disease could this be?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "newcastle",
+        "isolate"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ],
+      "prose_required": true
+    },
+    {
+      "id": "eval_vet_05_cattle_mastitis_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Clinical diagnosis and treatment advice for bovine mastitis.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "One quarter of my dairy cow udder is hot, swollen, and the milk is watery with clots. How should I handle this?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "mastitis",
+        "hygiene"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_vet_06_goat_broken_leg_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "First aid and triage for a goat with a fractured/broken leg.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "One of my goat broke a leg and its limping"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "leg",
+        "splint"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_vet_07_pig_african_swine_fever_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Recognition and emergency protocol for African Swine Fever.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "My pigs have high fever, red blotches on the ears and belly, and are dying rapidly. What disease is this?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "swine fever",
+        "biosecurity"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_ledger_01_sale_goats_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Routing livestock sale of 3 goats to register_flock decrement instead of expenditure.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "we sold 3 goats at 15000 each"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "Sold 3",
+        "Goat",
+        "total"
+      ],
+      "must_not_contain": [
+        "expenditure",
+        "poultry",
+        "purchased for market",
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_02_sale_chickens_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Routing poultry sale of 5 birds to register_flock sale decrement.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "sold 5 chickens for 20000"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "Sold 5",
+        "Poultry",
+        "total"
+      ],
+      "must_not_contain": [
+        "expenditure",
+        "goat",
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_03_purchase_cows_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Recording purchase of 10 cows into the flock ledger.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "I bought 10 cows"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "10",
+        "Cattle",
+        "total"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_04_mortality_chickens_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Recording mortality event of 3 chickens in flock ledger.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "3 chickens died today"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "mortality",
+        "3",
+        "Poultry",
+        "total"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_05_initial_goats_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Setting baseline headcount of 9 goats.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "We currently have 9 goats"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "9",
+        "Goat",
+        "total"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_06_query_goat_count_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Querying current goat inventory count from flock ledger.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "how many goats do i have"
+        }
+      ],
+      "expected_tools": [
+        "list_animals"
+      ],
+      "must_contain": [
+        "Goat",
+        "flock"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_ledger_07_query_poultry_count_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Querying current poultry inventory count from flock ledger.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "how many chickens do i have"
+        }
+      ],
+      "expected_tools": [
+        "list_animals"
+      ],
+      "must_contain": [
+        "Poultry",
+        "flock"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_expenditure_01_goat_feed_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Recording feed expenditure under goat feed with exact farm_id scoping.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Record 15,000 NGN spent on goat feed"
+        }
+      ],
+      "expected_tools": [
+        "write_expenditure"
+      ],
+      "must_contain": [
+        "15,000",
+        "goat feed"
+      ],
+      "must_not_contain": [
+        "poultry",
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_expenditure_02_poultry_vaccine_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Recording poultry vaccine medical expense.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Spent 8000 on poultry vaccines"
+        }
+      ],
+      "expected_tools": [
+        "write_expenditure"
+      ],
+      "must_contain": [
+        "8,000",
+        "poultry"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_expenditure_03_query_spending_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Retrieving recorded operational expenditures summary.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "how much have i spent this month"
+        }
+      ],
+      "expected_tools": [
+        "list_expenditures"
+      ],
+      "must_contain": [
+        "expenditures",
+        "NGN"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_memory_01_goat_floodlight_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Logging infrastructure observation of floodlight in goat pen.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "I have a floodlight in the goat pen"
+        }
+      ],
+      "expected_tools": [
+        "log_farm_observation"
+      ],
+      "must_contain": [
+        "floodlight",
+        "goat"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_memory_02_sensor_lookup_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Executing get_sensor_data for telemetry node querying.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Check the current soil moisture and temperature readings for sensor node node_01"
+        }
+      ],
+      "expected_tools": [
+        "get_sensor_data"
+      ],
+      "must_contain": [
+        "node_01"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_memory_03_animal_health_log_en",
+      "category": "tool_calling",
+      "language": "english",
+      "description": "Logging vaccination treatment for individual animal tag.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Log vaccination treatment for animal ANM-001"
+        }
+      ],
+      "expected_tools": [
+        "write_health_log"
+      ],
+      "must_contain": [
+        "ANM-001",
+        "vaccination"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_feed_01_fish_diy_en",
+      "category": "feed_formulation",
+      "language": "english",
+      "description": "Low-cost DIY fish feed formulation using local ingredients in English.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "How can I make a DIY feed for the fishes"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "protein",
+        "cassava"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_feed_02_chicks_starter_nutrition_en",
+      "category": "feed_formulation",
+      "language": "english",
+      "description": "Nutritional and brooding advice for day-old chicks.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "What should i feed day old chicks"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "starter",
+        "protein",
+        "water"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_feed_03_pig_local_maize_en",
+      "category": "feed_formulation",
+      "language": "english",
+      "description": "Formulating pig feed using local maize and protein supplements.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "how to mix pig feed with local maize"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "maize",
+        "protein"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_feed_04_goat_dry_season_en",
+      "category": "feed_formulation",
+      "language": "english",
+      "description": "Dry season feed supplementation and forage management for goats.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "What cheap local forage and supplements can I feed my goats during the dry season when green pasture is scarce?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "hay",
+        "supplement"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_crop_01_cassava_mosaic_en",
+      "category": "agronomy_crops",
+      "language": "english",
+      "description": "Identification and control of Cassava Mosaic Disease (CMD).",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "How do I treat cassava mosaic virus?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "mosaic",
+        "resistant"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_crop_02_maize_fall_armyworm_en",
+      "category": "agronomy_crops",
+      "language": "english",
+      "description": "Scouting and control strategies for Fall Armyworm in maize fields.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Caterpillars are eating the whorls and leaves of my young maize crop leaving ragged holes and frass. What should I do?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "armyworm",
+        "control"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_multiturn_01_goat_symptoms_diagnosis_en",
+      "category": "multi_turn_diagnosis",
+      "language": "english",
+      "description": "Multi-turn clinical diagnosis flow for goat tetanus.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "My goat is weak and cant move and the jaw is stuck. the body is also stiff"
+        },
+        {
+          "role": "assistant",
+          "content": "Here is the recommended guidance:\nIsolate the animal immediately in a clean, quiet, and shaded pen. Avoid excessive noise or bright light, and do not attempt forced drenching of fluids to prevent choking."
+        },
+        {
+          "role": "user",
+          "content": "what coult be the issue?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "tetanus",
+        "vet"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_multiturn_02_poultry_mortality_en",
+      "category": "multi_turn_diagnosis",
+      "language": "english",
+      "description": "Multi-turn emergency response to overnight flock mortality.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "I lost 15 broiler birds suddenly overnight in pen 2 with no prior signs."
+        },
+        {
+          "role": "assistant",
+          "content": "Here is the recommended guidance:\nImmediately separate the remaining live birds, check waterers and ventilation, and collect dead birds in sealed bags away from the pens."
+        },
+        {
+          "role": "user",
+          "content": "What urgent steps should I take next to prevent further deaths?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "disinfect",
+        "water"
+      ],
+      "must_not_contain": [
+        "dey",
+        "wey",
+        "wetin",
+        "una",
+        "dem",
+        " di ",
+        "well-well"
+      ]
+    },
+    {
+      "id": "eval_hausa_01_tetanus_query",
+      "category": "bilingual_fidelity",
+      "language": "hausa",
+      "description": "Responding in accurate Hausa for goat tetanus inquiry.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Menene cutar tetanus a cikin awaki?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "awaki",
+        "cutar"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_hausa_02_flock_query",
+      "category": "bilingual_fidelity",
+      "language": "hausa",
+      "description": "Responding in accurate Hausa for flock count ledger query.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Kaji nawa nake da su a gonata?"
+        }
+      ],
+      "expected_tools": [
+        "list_animals"
+      ],
+      "must_contain": [
+        "gonarku",
+        "kuna da"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_hausa_03_goat_sale",
+      "category": "bilingual_fidelity",
+      "language": "hausa",
+      "description": "Responding in Hausa for goat sale transaction.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Mun sayar da awaki 3 a kan naira 15000 kowanne"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "sayar",
+        "awaki",
+        "Jimillar"
+      ],
+      "must_not_contain": [
+        "expenditure",
+        "poultry",
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_pidgin_01_fowl_grow_fast",
+      "category": "bilingual_fidelity",
+      "language": "pidgin",
+      "description": "Poultry chick nutrition guidance in authentic Nigerian Pidgin.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Wetin I fit give my small fowl make dem grow fast?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "feed"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_pidgin_02_goat_sale",
+      "category": "bilingual_fidelity",
+      "language": "pidgin",
+      "description": "Responding in Pidgin for goat sale transaction.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "we sell 3 goats for 15000 each"
+        }
+      ],
+      "expected_tools": [
+        "register_flock"
+      ],
+      "must_contain": [
+        "Sold 3",
+        "Goat",
+        "total"
+      ],
+      "must_not_contain": [
+        "expenditure",
+        "poultry",
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_pidgin_03_goat_cough_mucus",
+      "category": "bilingual_fidelity",
+      "language": "pidgin",
+      "description": "Goat respiratory symptoms and triage in authentic Nigerian Pidgin.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "My goat dey cough well-well and thick mucus dey comot for nose. Wetin fit be di cause?"
+        }
+      ],
+      "expected_tools": [
+        "query_knowledge_base"
+      ],
+      "must_contain": [
+        "goat"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    }
+  ]
+}

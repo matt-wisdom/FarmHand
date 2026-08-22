@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-08-21T23:11:15.447333",
+  "total_count": 1,
+  "passed_count": 0,
+  "failed_count": 1,
+  "pass_rate_pct": 0.0,
+  "avg_latency_sec": 325.04,
+  "total_duration_sec": 325.04,
+  "category_stats": {
+    "veterinary_diagnosis": {
+      "total": 1,
+      "passed": 0
+    }
+  },
+  "results": [
+    {
+      "id": "eval_vet_01_goat_tetanus_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Overview and cause of tetanus (lockjaw) in goats in standard English prose.",
+      "passed": false,
+      "latency_sec": 325.04,
+      "failure_reasons": [
+        "Missing required keyword/concept: 'bacteria'"
+      ],
+      "response": "Here is the recommended guidance:\nTetracycline injection is the standard treatment for tetanus in goats. Administering it within 48 hours of wound exposure prevents severe cases and reduces mortality by blocking toxin release from nerve cells. Routine deworming with levonorrine also helps prevent secondary infection."
+    }
+  ]
+}
