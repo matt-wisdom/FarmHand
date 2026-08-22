@@ -401,9 +401,9 @@ html, body {
    ========================================================================== */
 .chat-workspace {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
   position: relative;
   overflow: hidden;
 }
@@ -1468,6 +1468,67 @@ html, body {
 }
 
 /* Anomaly Detection UI Styles */
+.global-anomaly-alert-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  z-index: 50;
+  animation: slideDownAlert 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownAlert {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.global-alert-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.global-alert-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-main);
+}
+
+.global-alert-time {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.global-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tab-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 2px;
+}
+
+.tab-badge-dot.rose {
+  background-color: var(--accent-rose);
+  box-shadow: 0 0 6px rgba(225, 29, 72, 0.6);
+  animation: pulseScale 1.5s infinite ease-in-out;
+}
+
+.tab-badge-dot.amber {
+  background-color: var(--accent-amber);
+  box-shadow: 0 0 6px rgba(217, 119, 6, 0.6);
+}
+
 .anomaly-alert-banner {
   display: flex;
   align-items: center;
@@ -1480,14 +1541,14 @@ html, body {
 }
 
 .alert-critical {
-  background-color: rgba(225, 29, 72, 0.06);
-  border: 1px solid rgba(225, 29, 72, 0.3);
+  background-color: rgba(225, 29, 72, 0.08);
+  border: 1px solid rgba(225, 29, 72, 0.35);
   color: var(--text-main);
 }
 
 .alert-warning {
-  background-color: rgba(217, 119, 6, 0.06);
-  border: 1px solid rgba(217, 119, 6, 0.3);
+  background-color: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.35);
   color: var(--text-main);
 }
 
@@ -1497,8 +1558,8 @@ html, body {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
-  background-color: var(--bg-hover);
-  border: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   margin-bottom: 16px;
   flex-wrap: wrap;
@@ -1510,7 +1571,7 @@ html, body {
   border: 1px solid rgba(225, 29, 72, 0.4);
 }
 .btn-outline-rose:hover {
-  background: rgba(225, 29, 72, 0.1);
+  background: rgba(225, 29, 72, 0.12);
 }
 
 .btn-outline-amber {
@@ -1519,16 +1580,16 @@ html, body {
   border: 1px solid rgba(217, 119, 6, 0.4);
 }
 .btn-outline-amber:hover {
-  background: rgba(217, 119, 6, 0.1);
+  background: rgba(217, 119, 6, 0.12);
 }
 
 .btn-outline-muted {
   background: transparent;
   color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
 }
 .btn-outline-muted:hover {
-  background: var(--bg-hover);
+  background: var(--bg-tertiary);
   color: var(--text-main);
 }
 

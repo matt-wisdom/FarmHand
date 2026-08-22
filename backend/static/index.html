@@ -179,6 +179,8 @@
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
               </svg>
               <span>Flock Ledger</span>
+              <span v-if="latestAnomaly && latestAnomaly.severity === 'CRITICAL'" class="tab-badge-dot rose" title="Critical Anomaly Detected"></span>
+              <span v-else-if="latestAnomaly && latestAnomaly.severity === 'WARNING'" class="tab-badge-dot amber" title="Warning Anomaly Detected"></span>
             </div>
 
             <div class="nav-link" :class="{ active: currentTab === 'telemetry' }" @click="switchTab('telemetry')" title="IoT Sensors">
@@ -218,6 +220,29 @@
           </svg>
         </button>
       </header>
+
+      <!-- GLOBAL FLOCK ANOMALY ALERT BANNER (Shown across ALL tabs including Chat) -->
+      <div v-if="latestAnomaly && (latestAnomaly.severity === 'CRITICAL' || latestAnomaly.severity === 'WARNING')" class="global-anomaly-alert-bar" :class="latestAnomaly.severity === 'CRITICAL' ? 'alert-critical' : 'alert-warning'">
+        <div class="global-alert-left">
+          <span class="badge" :class="latestAnomaly.severity === 'CRITICAL' ? 'badge-rose' : 'badge-amber'">
+            {{ latestAnomaly.severity === 'CRITICAL' ? 'CRITICAL FLOCK ALERT' : 'FLOCK ANOMALY WARNING' }}
+          </span>
+          <span class="global-alert-title">{{ latestAnomaly.title }}</span>
+          <span class="global-alert-time" v-if="latestAnomaly.created_at">({{ latestAnomaly.created_at.slice(0, 16) }})</span>
+        </div>
+        <div class="global-alert-actions">
+          <button class="btn-sm" :class="latestAnomaly.severity === 'CRITICAL' ? 'btn-outline-rose' : 'btn-outline-amber'" @click="openAnomalyModal">
+            View Advisory Report
+          </button>
+          <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly" style="display: flex; align-items: center; gap: 4px;">
+            <svg v-if="isAnalyzingAnomaly" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+              <line x1="12" y1="2" x2="12" y2="6"></line>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+            </svg>
+            <span>{{ isAnalyzingAnomaly ? 'Scanning...' : 'Re-Scan' }}</span>
+          </button>
+        </div>
+      </div>
 
       <!-- VIEW TAB 1: AI ASSISTANT CHAT WINDOW -->
       <section v-if="currentTab === 'assistant'" class="chat-workspace">
@@ -534,36 +559,8 @@
             </div>
           </div>
 
-          <!-- Minimalist Anomaly Alert Banner -->
-          <div v-if="latestAnomaly && latestAnomaly.severity === 'CRITICAL'" class="anomaly-alert-banner alert-critical">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <span class="badge badge-rose">CRITICAL ALERT</span>
-              <span style="font-weight: 600; font-size: 0.88rem;">{{ latestAnomaly.title }}</span>
-              <span style="color: var(--text-muted); font-size: 0.8rem;" v-if="latestAnomaly.created_at">({{ latestAnomaly.created_at.slice(0, 16) }})</span>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-sm btn-outline-rose" @click="openAnomalyModal">View Advisory Report</button>
-              <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
-                {{ isAnalyzingAnomaly ? 'Scanning...' : 'Re-Scan' }}
-              </button>
-            </div>
-          </div>
-
-          <div v-else-if="latestAnomaly && latestAnomaly.severity === 'WARNING'" class="anomaly-alert-banner alert-warning">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <span class="badge badge-amber">WARNING</span>
-              <span style="font-weight: 600; font-size: 0.88rem;">{{ latestAnomaly.title }}</span>
-              <span style="color: var(--text-muted); font-size: 0.8rem;" v-if="latestAnomaly.created_at">({{ latestAnomaly.created_at.slice(0, 16) }})</span>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-sm btn-outline-amber" @click="openAnomalyModal">View Advisory Report</button>
-              <button class="btn-sm btn-outline-muted" @click="runAnomalyCheck" :disabled="isAnalyzingAnomaly">
-                {{ isAnalyzingAnomaly ? 'Scanning...' : 'Re-Scan' }}
-              </button>
-            </div>
-          </div>
-
-          <div v-else-if="latestAnomaly && latestAnomaly.severity === 'NORMAL'" class="anomaly-status-bar">
+          <!-- Flock Baseline Health Status Bar (Shown when baseline is normal) -->
+          <div v-if="latestAnomaly && latestAnomaly.severity === 'NORMAL'" class="anomaly-status-bar">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-muted);">
               <span class="badge badge-green">NORMAL</span>
               <span>Flock baseline stable. No anomalies detected.</span>
