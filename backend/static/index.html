@@ -240,9 +240,9 @@
               <div class="msg-avatar">{{ m.role === 'user' ? 'U' : 'FH' }}</div>
               
               <!-- VIEW MODE -->
-              <div v-if="editingMsgId !== m.id" class="msg-bubble">
+              <div v-if="editingMsgId !== (m.id || 'idx_' + idx)" class="msg-bubble">
                 <div class="markdown-body" v-html="renderMarkdown(m.content)"></div>
-                <button v-if="m.role === 'user' && m.id" class="msg-edit-btn" @click="startEditingMessage(m, idx)" title="Edit message & rerun">
+                <button v-if="m.role === 'user'" class="msg-edit-btn" @click="startEditingMessage(m, idx)" title="Edit message & rerun">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
                     <path d="m15 5 4 4"/>
@@ -1921,7 +1921,15 @@
 
             if (res.ok) {
               const data = await res.json();
-              messages.value.push({ role: 'assistant', content: data.response });
+              if (data.user_message_id && data.assistant_message_id) {
+                const lastUser = messages.value[messages.value.length - 1];
+                if (lastUser && lastUser.role === 'user') {
+                  lastUser.id = data.user_message_id;
+                }
+                messages.value.push({ id: data.assistant_message_id, role: 'assistant', content: data.response });
+              } else {
+                messages.value.push({ role: 'assistant', content: data.response });
+              }
               scrollToBottom();
             }
           } catch (e) {
@@ -1933,7 +1941,7 @@
         };
 
         const startEditingMessage = (m, idx) => {
-          editingMsgId.value = m.id;
+          editingMsgId.value = m.id || `idx_${idx}`;
           editBuffer.value = m.content;
         };
 
@@ -1944,16 +1952,21 @@
 
         const submitEditMessage = async (msgIndex) => {
           if (!editBuffer.value.trim() || isSending.value) return;
+          const userText = editBuffer.value.trim();
+          const targetMsg = messages.value[msgIndex];
+          const targetMsgId = (targetMsg && targetMsg.id) ? targetMsg.id : null;
+
+          editingMsgId.value = null;
+          editBuffer.value = '';
           isSending.value = true;
+
+          // Truncate messages in local UI state up to msgIndex
+          messages.value = messages.value.slice(0, msgIndex);
+          // Add edited user message
+          messages.value.push({ role: 'user', content: userText, id: null });
+          scrollToBottom();
+
           try {
-            messages.value = messages.value.slice(0, msgIndex);
-            const userText = editBuffer.value.trim();
-            editingMsgId.value = null;
-            editBuffer.value = '';
-
-            messages.value.push({ role: 'user', content: userText });
-            scrollToBottom();
-
             const res = await fetch('/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1961,13 +1974,22 @@
                 thread_id: activeThreadId.value,
                 user_input: userText,
                 farm_id: activeFarmId.value,
-                language: selectedLanguage.value
+                language: selectedLanguage.value,
+                edit_message_id: targetMsgId,
+                edit_message_index: msgIndex
               })
             });
 
             if (res.ok) {
               const data = await res.json();
-              messages.value.push({ role: 'assistant', content: data.response });
+              // Refresh full thread messages to ensure IDs and timestamps are 100% in sync with database
+              const threadRes = await fetch(`/threads/${activeThreadId.value}`);
+              if (threadRes.ok) {
+                const threadData = await threadRes.json();
+                messages.value = threadData.messages || [];
+              } else {
+                messages.value.push({ role: 'assistant', content: data.response });
+              }
               scrollToBottom();
             }
           } catch (e) {

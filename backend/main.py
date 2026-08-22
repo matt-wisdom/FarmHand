@@ -36,6 +36,8 @@ from database import (
     delete_farm_memory,
     get_thread_by_id,
     get_thread_messages,
+    truncate_thread_messages_from,
+    truncate_thread_messages_by_index,
     init_db,
     record_flock_event,
     update_farm,
@@ -152,6 +154,8 @@ class ChatRequest(BaseModel):
     user_input: str = Field(..., description="User text prompt")
     farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
     language: Optional[str] = Field("english", description="Language: english, hausa, pidgin")
+    edit_message_id: Optional[int] = Field(None, description="Optional ID of message being edited to truncate history from")
+    edit_message_index: Optional[int] = Field(None, description="Optional 0-based index of message being edited to truncate history from")
 
 
 class EditMessageRequest(BaseModel):
@@ -159,12 +163,15 @@ class EditMessageRequest(BaseModel):
     message_index: int = Field(..., description="0-indexed position of message to edit")
     new_content: str = Field(..., description="Updated text prompt")
     farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
+    language: Optional[str] = Field("english", description="Language: english, hausa, pidgin")
 
 
 class ChatResponse(BaseModel):
     status: str = "success"
     thread_id: str = Field(..., description="UUID of the chat thread")
     response: str = Field(..., description="Assistant final response string")
+    user_message_id: Optional[int] = Field(None, description="ID of newly inserted user message")
+    assistant_message_id: Optional[int] = Field(None, description="ID of newly inserted assistant message")
 
 
 class FlockEventRequest(BaseModel):
@@ -634,20 +641,28 @@ def chat_endpoint(payload: ChatRequest):
     farm_id = payload.farm_id or "default_farm"
     language = normalize_language(payload.language)
 
-    logger.info(f"[API /chat] Incoming Request | thread_id='{thread_id}' | farm_id='{farm_id}' | language='{language}' | prompt='{user_input}'")
+    logger.info(f"[API /chat] Incoming Request | thread_id='{thread_id}' | farm_id='{farm_id}' | language='{language}' | prompt='{user_input}' | edit_id={payload.edit_message_id} | edit_idx={payload.edit_message_index}")
 
     if not user_input:
         logger.warning(f"[API /chat] Empty user_input received for thread '{thread_id}'")
         raise HTTPException(status_code=400, detail="user_input cannot be empty.")
 
-    # 1. Fetch thread history from DB
+    # 0. Truncate history if editing a prior message
+    if payload.edit_message_id is not None:
+        truncated = truncate_thread_messages_from(thread_id, payload.edit_message_id)
+        logger.info(f"[API /chat] Truncated {truncated} messages starting from message id {payload.edit_message_id}")
+    elif payload.edit_message_index is not None:
+        truncated = truncate_thread_messages_by_index(thread_id, payload.edit_message_index)
+        logger.info(f"[API /chat] Truncated {truncated} messages starting from index {payload.edit_message_index}")
+
+    # 1. Fetch thread history from DB (clean and truncated)
     history_rows = get_thread_messages(thread_id)
     messages: List[Dict[str, str]] = [{"role": r["role"], "content": r["content"]} for r in history_rows]
     logger.info(f"[API /chat] Loaded {len(messages)} prior messages from database for thread '{thread_id}'")
 
     # 2. Append new user prompt
     messages.append({"role": "user", "content": user_input})
-    add_chat_message(thread_id, "user", user_input)
+    user_msg_id = add_chat_message(thread_id, "user", user_input)
 
     # 3. Process LLM completion with farm_id context
     try:
@@ -657,15 +672,30 @@ def chat_endpoint(payload: ChatRequest):
         assistant_response = f"Internal system error: {str(e)}"
 
     # 4. Save assistant response to DB
-    add_chat_message(thread_id, "assistant", assistant_response)
+    asst_msg_id = add_chat_message(thread_id, "assistant", assistant_response)
     total_req_time = time.time() - req_start
     logger.info(f"[API /chat] Completed successfully in {total_req_time:.2f}s | Response length: {len(assistant_response)} chars")
 
     return ChatResponse(
         status="success",
         thread_id=thread_id,
-        response=assistant_response
+        response=assistant_response,
+        user_message_id=user_msg_id,
+        assistant_message_id=asst_msg_id
     )
+
+
+@app.post("/chat/edit", response_model=ChatResponse, tags=["AI Chat"])
+def edit_chat_message_endpoint(payload: EditMessageRequest):
+    """POST /chat/edit: Edits a message at message_index, truncates subsequent history, and reruns completion."""
+    chat_req = ChatRequest(
+        thread_id=payload.thread_id,
+        user_input=payload.new_content,
+        farm_id=payload.farm_id,
+        language=payload.language or "english",
+        edit_message_index=payload.message_index
+    )
+    return chat_endpoint(chat_req)
 
 
 @app.post("/threads/chat", response_model=ChatResponse, tags=["AI Chat"])

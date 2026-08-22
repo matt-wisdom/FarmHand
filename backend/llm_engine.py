@@ -339,14 +339,14 @@ def generate_stateless_answer(llm: Llama, context_data: str, user_question: str,
             f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
             "- Directly and accurately answer the farmer's specific question in natural, clear sentences or paragraphs.\n"
-            "- For definitions, illness overviews, or diagnostic queries (e.g. 'what is tetanus in goats', 'what could be the issue?'): explain clearly in informative prose without forcing numbered lists.\n"
-            "- For feeding, formulations, recipes, or multi-step procedures: detail practical ingredients, crude protein percentages, local substitutes, and preparation steps clearly.\n"
-            "- For diseases & clinical symptoms: evaluate symptoms against reference documents, identify likely conditions (e.g. Tetanus, Newcastle, Mastitis), provide immediate supportive care, and recommend contacting a licensed veterinarian.\n"
+            "- For definitions, disease overviews, or 'what is' questions: Directly define the disease or concept first. State the disease type, causative pathogen (bacteria, virus, parasite), how it infects the animal, and its key clinical signs/symptoms before mentioning prevention or veterinary care.\n"
+            "- For clinical symptoms / diagnosis queries (e.g. 'what could be the issue?'): Identify the probable illness based on symptoms, explain why, and provide supportive first-aid care while recommending a veterinarian.\n"
+            "- For feeding, formulations, recipes, or multi-step procedures: Detail practical ingredients, crude protein percentages, local substitutes, and preparation steps clearly.\n"
             "- If specific details are not in the reference records, state knowledge limits clearly and provide safe standard best practices.\n"
             "- Do NOT output JSON or function calls.\n"
             "- NEVER output placeholder promises (e.g. do NOT say 'I will guide you through the steps'). Provide your complete response immediately."
         )
-        prefill = "Here is the recommended guidance:\n"
+        prefill = ""
 
         few_shot_1_user = "What is coccidiosis in poultry?"
         few_shot_1_assistant = (

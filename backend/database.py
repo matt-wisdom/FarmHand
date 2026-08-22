@@ -328,6 +328,28 @@ def get_thread_messages(thread_id: str, db_path: Path = DB_PATH) -> List[Dict[st
         return [dict(r) for r in cursor.fetchall()]
 
 
+def truncate_thread_messages_from(thread_id: str, from_message_id: int, db_path: Path = DB_PATH) -> int:
+    """Deletes all messages in a thread with id >= from_message_id (inclusive) to reset history upon edit."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM chat_messages WHERE thread_id = ? AND id >= ?",
+            (thread_id, from_message_id)
+        )
+        deleted_count = cursor.rowcount
+        cursor.execute("UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (thread_id,))
+        return deleted_count
+
+
+def truncate_thread_messages_by_index(thread_id: str, from_index: int, db_path: Path = DB_PATH) -> int:
+    """Deletes all messages in a thread starting from 0-based from_index onwards."""
+    messages = get_thread_messages(thread_id, db_path=db_path)
+    if 0 <= from_index < len(messages):
+        target_msg_id = messages[from_index]["id"]
+        return truncate_thread_messages_from(thread_id, target_msg_id, db_path=db_path)
+    return 0
+
+
 # -------------------------------------------------------------------
 # Operational Record Helper Functions
 # -------------------------------------------------------------------
