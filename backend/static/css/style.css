@@ -1148,13 +1148,34 @@ html, body {
 .modal-body-content h4 {
   color: var(--text-main);
   font-weight: 700;
-  margin-top: 14px;
-  margin-bottom: 6px;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+.modal-body-content h1:first-child,
+.modal-body-content h2:first-child,
+.modal-body-content h3:first-child,
+.modal-body-content h4:first-child {
+  margin-top: 0;
 }
 
 .modal-body-content h3 {
   color: var(--accent-green);
-  font-size: 1rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--accent-green-light);
+}
+
+.modal-body-content p {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.modal-body-content p:last-child {
+  margin-bottom: 0;
 }
 
 .modal-body-content strong {
@@ -1164,19 +1185,23 @@ html, body {
 
 .modal-body-content ul,
 .modal-body-content ol {
-  margin: 8px 0 12px 20px;
+  margin: 6px 0 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .modal-body-content li {
-  margin-bottom: 4px;
+  line-height: 1.55;
+  color: var(--text-main);
 }
 
 .modal-body-content blockquote {
   border-left: 3px solid var(--accent-green);
   background-color: var(--accent-green-light);
-  padding: 8px 14px;
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
-  margin: 10px 0;
+  margin: 12px 0;
   font-size: 0.88rem;
   color: var(--text-main);
 }

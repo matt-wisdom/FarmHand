@@ -1317,10 +1317,14 @@
 
         const renderedAnomalyReport = computed(() => {
           if (!latestAnomaly.value || !latestAnomaly.value.report_text) return '';
+          let text = latestAnomaly.value.report_text.trim();
+          // Normalize legacy or raw sections into structured Markdown headers
+          text = text.replace(/^#\s+Flock Health Anomaly Advisory\s*/i, '');
+          text = text.replace(/^(\d+\.|\#{1,3}\s*\d*\.?)\s*([A-Za-z &]+):?/gm, (m, p1, p2) => '### ' + p2.trim());
           try {
-            return marked.parse(latestAnomaly.value.report_text);
+            return marked.parse(text);
           } catch (e) {
-            return latestAnomaly.value.report_text;
+            return text;
           }
         });
 

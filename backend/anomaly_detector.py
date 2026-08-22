@@ -435,14 +435,19 @@ def synthesize_clinical_report(
         ml_bullets = "- No standalone ML statistical outliers."
 
     system_prompt = (
-        "You are FarmHand AI, an expert veterinary epidemiologist and agricultural advisor.\n"
+        "You are FarmHand AI, an expert veterinary epidemiologist and livestock advisor.\n"
         "Write your advisory report in clear, formal, standard international English.\n"
         "Do NOT use Nigerian Pidgin or slang. Do NOT use emojis.\n"
-        "Synthesize the detected flock anomalies into a clean, actionable clinical report with the following 4 sections:\n"
-        "1. Situation Overview: State the exact species, mortality numbers, and timeline.\n"
-        "2. Statistical & ML Assessment: Summarize percentage losses and anomaly severity.\n"
-        "3. Suspected Risks & Causes: Identify potential diseases, biosecurity breaches, or management stress.\n"
-        "4. Immediate Actionable Recommendations: Detail practical clinical steps (quarantine, hydration, veterinary consult, sanitation)."
+        "Strictly adhere to biological species boundaries (e.g. goats: PPR, CCPP, Enterotoxemia, Anthrax; poultry: Newcastle, Coccidiosis, Gumboro; cattle: CBPP, FMD). Never cross-attribute avian diseases to ruminants.\n"
+        "Format the clinical report using clean Markdown with these exact four section headers and structured bullet points with bold labels:\n\n"
+        "### 1. Situation Overview\n"
+        "- Detail the affected species, mortality/loss numbers, and timeline.\n\n"
+        "### 2. Statistical & ML Assessment\n"
+        "- Summarize percentage reduction and anomaly severity.\n\n"
+        "### 3. Suspected Risks & Causes\n"
+        "- Identify specific species-appropriate diseases, feed/water contamination, or biosecurity breaches.\n\n"
+        "### 4. Immediate Actionable Recommendations\n"
+        "- Provide actionable clinical steps (Quarantine, Hydration/electrolytes, Disinfection, Veterinary exam)."
     )
 
     user_content = (
@@ -455,21 +460,20 @@ def synthesize_clinical_report(
     prompt = (
         f"<|im_start|>system\n{system_prompt}\n"
         f"<|im_start|>user\n{user_content}\n"
-        "<|im_start|>assistant\n# Flock Health Anomaly Advisory\n\n1. Situation Overview:\n"
+        "<|im_start|>assistant\n### 1. Situation Overview\n"
     )
 
     if llm is None:
         return (
-            f"Flock Anomaly Advisory [{severity}]\n\n"
-            f"1. Situation Overview:\n{issues_bullets}\n\n"
-            f"2. Statistical & ML Assessment:\n{ml_bullets}\n\n"
-            f"3. Suspected Risks & Causes:\nPotential infectious disease outbreak, severe parasitic infestation, or acute environmental stress.\n\n"
-            f"4. Immediate Actionable Recommendations:\n- Immediately isolate affected or symptomatic animals.\n- Clean and disinfect all feeding troughs and water containers.\n- Provide oral rehydration and contact a local veterinary officer for diagnostic testing."
+            f"### 1. Situation Overview\n{issues_bullets}\n\n"
+            f"### 2. Statistical & ML Assessment\n{ml_bullets}\n\n"
+            f"### 3. Suspected Risks & Causes\n- **Infectious Risk**: Potential species-specific pathogen or acute bacterial enteritis.\n- **Management Factors**: Possible feed/water contamination or acute environmental stress.\n\n"
+            f"### 4. Immediate Actionable Recommendations\n- **Quarantine**: Immediately isolate affected or symptomatic stock in a separate, clean pen.\n- **Sanitation**: Thoroughly disinfect all communal feeding troughs and watering stations.\n- **Veterinary Intervention**: Provide oral rehydration and contact a certified veterinarian for clinical examination."
         )
 
     try:
         est_tokens = len(prompt) // 3
-        max_gen_tokens = max(100, min(350, N_CTX - est_tokens - 100))
+        max_gen_tokens = max(100, min(380, N_CTX - est_tokens - 100))
 
         response = llm.create_completion(
             prompt=prompt,
@@ -480,15 +484,15 @@ def synthesize_clinical_report(
             stop=["<|im_end|>", "<|im_start|>"]
         )
         body = response["choices"][0]["text"].strip()
-        report = "# Flock Health Anomaly Advisory\n\n1. Situation Overview:\n" + body
+        report = "### 1. Situation Overview\n" + body
         return report
     except Exception as e:
         print(f"[anomaly_detector] LLM synthesis exception: {e}")
         return (
-            f"Flock Anomaly Advisory [{severity}]\n\n"
-            f"1. Situation Overview:\n{issues_bullets}\n\n"
-            f"2. Statistical & ML Assessment:\n{ml_bullets}\n\n"
-            f"3. Immediate Actionable Recommendations:\n- Immediately isolate sick animals.\n- Check feed and clean water supplies.\n- Consult a qualified veterinarian immediately."
+            f"### 1. Situation Overview\n{issues_bullets}\n\n"
+            f"### 2. Statistical & ML Assessment\n{ml_bullets}\n\n"
+            f"### 3. Suspected Risks & Causes\n- **Infectious Risk**: Potential species-specific pathogen outbreak or severe parasitic burden.\n\n"
+            f"### 4. Immediate Actionable Recommendations\n- **Quarantine**: Immediately isolate sick animals.\n- **Water & Feed**: Inspect feed quality and provide fresh, clean water.\n- **Veterinary Care**: Consult a qualified veterinarian immediately."
         )
 
 
