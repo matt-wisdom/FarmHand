@@ -1941,6 +1941,8 @@
                 messages.value.push({ role: 'assistant', content: data.response });
               }
               scrollToBottom();
+              // Refresh dashboard data caches in background
+              fetchDashboardData().catch(err => console.debug('Background dashboard refresh:', err));
             }
           } catch (e) {
             console.error('Error sending chat message:', e);
@@ -2001,6 +2003,8 @@
                 messages.value.push({ role: 'assistant', content: data.response });
               }
               scrollToBottom();
+              // Refresh dashboard data caches in background
+              fetchDashboardData().catch(err => console.debug('Background dashboard refresh:', err));
             }
           } catch (e) {
             console.error('Error submitting edited message:', e);

@@ -446,10 +446,30 @@ def format_tool_direct_response(tool_name: str, result: dict, farm_id: str, lang
         evt = entry.get("event_type", "update")
         chg = entry.get("count_change", 0)
         tot = entry.get("new_total", 0)
+        notes = entry.get("notes", "")
+        note_str = f" ({notes})" if notes else ""
+        if evt == "sale":
+            if language == "hausa":
+                return f"An rubuta: An sayar da {abs(chg)} {sp} a bayanan gonarku ({farm_name}){note_str}. Jimillar {sp} a yanzu: {tot}."
+            elif language == "pidgin":
+                return f"Recorded: Sold {abs(chg)} {sp} for your farm ({farm_name}){note_str}. Your new {sp} total na {tot}."
+            return f"Recorded: Sold {abs(chg)} {sp} from {farm_name}{note_str}. Your current {sp} flock total is now {tot}."
+        elif evt == "mortality":
+            if language == "hausa":
+                return f"An rubuta: Mutuwar {abs(chg)} {sp} a bayanan gonarku ({farm_name}){note_str}. Jimillar {sp} a yanzu: {tot}."
+            elif language == "pidgin":
+                return f"Recorded: Logged {abs(chg)} {sp} death for {farm_name}{note_str}. Your new {sp} total na {tot}."
+            return f"Recorded: Logged mortality of {abs(chg)} {sp} for {farm_name}{note_str}. Your current {sp} flock total is now {tot}."
+        elif evt == "purchase":
+            if language == "hausa":
+                return f"An rubuta: Siyan {abs(chg)} {sp} a bayanan gonarku ({farm_name}){note_str}. Jimillar {sp} a yanzu: {tot}."
+            elif language == "pidgin":
+                return f"Recorded: Bought {abs(chg)} {sp} for your farm ({farm_name}){note_str}. Your new {sp} total na {tot}."
+            return f"Recorded: Added {abs(chg)} {sp} from purchase to {farm_name}{note_str}. Your current {sp} flock total is now {tot}."
         if language == "hausa":
-            return f"An rubuta: An sabunta {sp} ({evt}) a bayanan gonarku ({farm_name}). Yawan su a yanzu: {tot}."
+            return f"An rubuta: An sabunta {sp} ({evt}) a bayanan gonarku ({farm_name}){note_str}. Yawan su a yanzu: {tot}."
         elif language == "pidgin":
-            return f"Recorded: Updated {sp} ({evt}) for your farm ({farm_name}). Your new total na {tot}."
+            return f"Recorded: Updated {sp} ({evt}) for your farm ({farm_name}){note_str}. Your new total na {tot}."
         return f"Recorded: Logged {evt} ({chg:+d} {sp}). Your current flock total for {farm_name} is now {tot}."
 
     elif tool_name == "list_expenditures":
@@ -543,9 +563,9 @@ def chat_completion(
             "3. DISEASE TOPICS & DEFINITIONS: When the query asks about a disease or condition (e.g. 'tetanus in goats', 'what is tetanus in goats', 'coccidiosis in poultry'), formulate search_query with the species, disease name, pathogen, causes, and symptoms (e.g. 'goat tetanus lockjaw bacteria infection causes symptoms'). Do NOT narrow the query to just surgical or wound care.\n\n"
             "TOOLS:\n"
             "- list_animals(species: str, date_str: str): Check animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
-            "- register_flock(species: str, count: int, event_type: str, notes: str): Set, record, or update animal headcount (e.g. 'I have 5 chickens', 'We currently have 9 goats', 'bought 10 cows', '2 birds died').\n"
+            "- register_flock(species: str, count: int, event_type: str, notes: str): Set, record, or update animal headcount for births, counts, purchases, sales, or mortalities (e.g. 'I have 5 chickens', 'We currently have 9 goats', 'bought 10 cows', '2 birds died', 'we sold 3 goats at 15000 each', 'sold 5 chickens for 25000'). For sales, count is negative (e.g. -3) or positive with event_type='sale', and notes include price details.\n"
             "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
-            "- write_expenditure(category: str, amount: float, description: str): Record a new financial expense.\n"
+            "- write_expenditure(category: str, amount: float, description: str): Record a new financial farm operating cost/expense (e.g. feed, medication, vaccines, tools, equipment, labor). Category must match the species or item (e.g. 'goat feed', 'poultry health', 'equipment'). NEVER use for animal sales or revenue.\n"
             "- log_farm_observation(species: str, observation: str, category: str): Save persistent background setup memory about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing structure, or feeding routines. Use ONLY when the user states background facts about their farm setup.\n"
             "- query_knowledge_base(search_query: str): Search veterinary manuals and agricultural knowledge base for feeding, nutrition, care, diseases, illness, symptoms, formulation, treatments, medications, dosage, first-aid, or farming guidance.\n\n"
             "MULTI-TURN INSTRUCTION:\n"
@@ -571,7 +591,11 @@ def chat_completion(
             "Farmer: 'We currently have 9 goats' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"goat\", \"count\": 9, \"event_type\": \"initial_count\", \"notes\": \"\"}}]\n"
             "Farmer: 'I have 5 chickens' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": 5, \"event_type\": \"initial_count\", \"notes\": \"\"}}]\n"
             "Farmer: 'I bought 10 cows' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"cattle\", \"count\": 10, \"event_type\": \"purchase\", \"notes\": \"\"}}]\n"
+            "Farmer: 'we sold 3 goats at 15000 each' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"goat\", \"count\": -3, \"event_type\": \"sale\", \"notes\": \"Sold 3 goats at NGN 15,000 each (Total: NGN 45,000)\"}}]\n"
+            "Farmer: 'sold 5 chickens for 20000' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -5, \"event_type\": \"sale\", \"notes\": \"Sold 5 chickens for NGN 20,000\"}}]\n"
             "Farmer: '3 chickens died today' -> [{\"function_name\": \"register_flock\", \"arguments\": {\"species\": \"poultry\", \"count\": -3, \"event_type\": \"mortality\", \"notes\": \"\"}}]\n"
+            "Farmer: 'Record 15,000 NGN spent on goat feed' -> [{\"function_name\": \"write_expenditure\", \"arguments\": {\"category\": \"goat feed\", \"amount\": 15000, \"description\": \"15,000 NGN spent on goat feed\"}}]\n"
+            "Farmer: 'Spent 8000 on poultry vaccines' -> [{\"function_name\": \"write_expenditure\", \"arguments\": {\"category\": \"poultry health\", \"amount\": 8000, \"description\": \"Spent 8000 on poultry vaccines\"}}]\n"
             "Farmer: 'I have a floodlight in the goat pen' -> [{\"function_name\": \"log_farm_observation\", \"arguments\": {\"species\": \"goat\", \"category\": \"infrastructure\", \"observation\": \"Has a floodlight installed in the goat pen\"}}]\n"
             "Farmer: 'One of my goat broke a leg and its limping' -> [{\"function_name\": \"query_knowledge_base\", \"arguments\": {\"search_query\": \"goat broken leg fracture first aid treatment\"}}]\n"
             "Farmer: 'how much have i spent this month' -> [{\"function_name\": \"list_expenditures\", \"arguments\": {}}]"

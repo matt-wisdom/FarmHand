@@ -60,16 +60,24 @@ def list_animals(species: str = "", farm_id: str = "default_farm", date_str: str
 
 
 def register_flock(species: str, count: int, notes: str = "", event_type: str = "count_update", farm_id: str = "default_farm") -> Dict[str, Any]:
-    """Record a flock count update, purchase, or mortality into the flock ledger."""
+    """Record a flock count update, purchase, sale, or mortality into the flock ledger."""
     import database
     import anomaly_detector
     evt = event_type.lower().strip() if event_type else "count_update"
     is_delta = evt in ("purchase", "mortality", "sale", "loss", "addition") or int(count) < 0
+    cnt_int = int(count)
+    if evt in ("mortality", "sale", "loss") and cnt_int > 0:
+        count_change = -cnt_int
+    elif is_delta:
+        count_change = cnt_int
+    else:
+        count_change = 0
+
     entry = database.record_flock_event(
         farm_id=farm_id,
         species=species,
-        count_change=int(count) if is_delta else 0,
-        exact_total=int(count) if not is_delta else None,
+        count_change=count_change if is_delta else 0,
+        exact_total=cnt_int if not is_delta else None,
         event_type=evt,
         notes=notes
     )
@@ -99,19 +107,19 @@ def list_health_logs(animal_id: str = "", farm_id: str = "default_farm") -> Dict
     return {"status": "success", "count": len(rows), "data": rows}
 
 
-def write_expenditure(category: str, amount: float, description: str = "") -> Dict[str, Any]:
-    """Record a farm expenditure into the SQLite database."""
-    with get_db_connection(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO expenditures (category, amount, description) VALUES (?, ?, ?)",
-            (category, float(amount), description)
-        )
-        record_id = cursor.lastrowid
+def write_expenditure(category: str, amount: float, description: str = "", farm_id: str = "default_farm") -> Dict[str, Any]:
+    """Record a farm expenditure into the SQLite database for the active farm."""
+    import database
+    entry = database.record_expenditure(
+        farm_id=farm_id,
+        category=category,
+        amount=amount,
+        description=description
+    )
     return {
         "status": "success",
-        "message": f"Expenditure recorded with ID {record_id}",
-        "data": {"id": record_id, "category": category, "amount": amount, "description": description}
+        "message": f"Expenditure recorded with ID {entry['id']}",
+        "data": entry
     }
 
 
@@ -378,6 +386,17 @@ def normalize_tool_arguments(function_name: str, args: Dict[str, Any]) -> Dict[s
     if function_name == "list_animals":
         sp = norm_args.get("species") or norm_args.get("animal_type") or norm_args.get("target_species") or norm_args.get("animal") or ""
         return {"species": str(sp).strip()}
+
+    elif function_name == "register_flock":
+        species = norm_args.get("species") or norm_args.get("animal_type") or norm_args.get("animal") or "Poultry"
+        count_raw = norm_args.get("count") if "count" in norm_args else (norm_args.get("quantity") if "quantity" in norm_args else norm_args.get("amount", 0))
+        try:
+            count = int(count_raw)
+        except Exception:
+            count = 0
+        event_type = norm_args.get("event_type") or norm_args.get("type") or "count_update"
+        notes = norm_args.get("notes") or norm_args.get("description") or ""
+        return {"species": str(species).strip(), "count": count, "event_type": str(event_type).strip(), "notes": str(notes).strip()}
 
     elif function_name == "list_expenditures":
         cat = norm_args.get("category") or norm_args.get("type") or ""
