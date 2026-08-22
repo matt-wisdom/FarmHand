@@ -167,6 +167,50 @@ def eval_db_ledger_livestock_sale_decrement() -> EvalResult:
     return EvalResult("db_ledger_livestock_sale_decrement", passed, score, details, latency)
 
 
+@register_eval("flock_anomaly_sales_classification")
+def eval_flock_anomaly_sales_classification() -> EvalResult:
+    """Test that commercial livestock sales are never misclassified as mortality spikes or disease outbreaks."""
+    start = time.time()
+    try:
+        import database
+        import tool_registry
+        import anomaly_detector
+        
+        test_farm = "eval_farm_anomaly_sales_check"
+        # 1. Setup 10 goats
+        tool_registry.register_flock(
+            species="goat",
+            count=10,
+            event_type="initial_count",
+            farm_id=test_farm
+        )
+        
+        # 2. Record sale of 3 goats
+        tool_registry.register_flock(
+            species="goat",
+            count=3,
+            event_type="sale",
+            notes="Sold 3 goats at NGN 15,000 each",
+            farm_id=test_farm
+        )
+        
+        # 3. Run anomaly detector
+        res = anomaly_detector.run_flock_anomaly_detection(farm_id=test_farm)
+        severity = res.get("severity")
+        issues = res.get("metrics", {}).get("deterministic_issues", [])
+        mortality_issues = [i for i in issues if "MORTALITY" in i.get("type", "")]
+        
+        passed = (severity == "NORMAL") and (len(mortality_issues) == 0)
+        details = f"Severity: {severity}, Total Issues: {len(issues)}, Mortality Issues: {len(mortality_issues)}"
+        score = 1.0 if passed else 0.0
+    except Exception as e:
+        passed = False
+        details = f"Error: {str(e)[:100]}"
+        score = 0.0
+    latency = (time.time() - start) * 1000
+    return EvalResult("flock_anomaly_sales_classification", passed, score, details, latency)
+
+
 @register_eval("db_expenditure_farm_scoping")
 def eval_db_expenditure_farm_scoping() -> EvalResult:
     """Test that writing an expenditure properly scopes the record to the active farm ID."""

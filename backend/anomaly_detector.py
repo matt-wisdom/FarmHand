@@ -27,6 +27,11 @@ from database import (
 )
 
 
+# Event Type Taxonomies
+MORTALITY_EVENT_TYPES = {"mortality", "death", "cull", "loss", "deceased"}
+COMMERCIAL_EVENT_TYPES = {"sale", "sales", "sold", "transfer", "transferred", "harvest", "slaughter"}
+
+
 # -------------------------------------------------------------------
 # Feature Extraction & Time-Series Preprocessing
 # -------------------------------------------------------------------
@@ -36,8 +41,8 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
     Extracts numerical feature vectors from chronological ledger events for classical ML models.
     Features:
       1. pct_change: ratio of count_change to previous balance
-      2. is_loss: binary flag (1 if count_change < 0 else 0)
-      3. loss_magnitude: absolute number of lost animals
+      2. is_loss: binary flag (1 if mortality event with count_change < 0 else 0)
+      3. loss_magnitude: absolute number of lost animals (0 for sales/transfers)
       4. days_interval: days elapsed since the preceding event
       5. rolling_7d_losses: cumulative losses in the preceding 7 calendar days
     """
@@ -57,14 +62,15 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
             curr_dt = datetime.now()
 
         count_change = int(evt.get("count_change", 0))
+        event_type = (evt.get("event_type") or "").lower()
         new_total = int(evt.get("new_total", 0))
         prev_total = new_total - count_change
         if prev_total <= 0:
             prev_total = max(1, new_total)
 
         pct_change = count_change / prev_total
-        is_loss = 1.0 if count_change < 0 else 0.0
-        loss_magnitude = float(abs(count_change)) if count_change < 0 else 0.0
+        is_mortality_loss = 1.0 if (event_type in MORTALITY_EVENT_TYPES and count_change < 0) else 0.0
+        loss_magnitude = float(abs(count_change)) if is_mortality_loss else 0.0
 
         # Days interval from previous event
         if i > 0:
@@ -77,19 +83,20 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
         else:
             days_interval = 1.0
 
-        # Rolling 7-day losses prior to this event
+        # Rolling 7-day losses prior to this event (strictly mortality losses)
         seven_days_ago = curr_dt - timedelta(days=7)
         rolling_losses = 0
         for prior_evt in sorted_events[:i]:
             try:
                 p_time = prior_evt.get("created_at") or ""
                 p_dt = datetime.fromisoformat(p_time.replace("Z", "+00:00"))
-                if p_dt >= seven_days_ago and prior_evt.get("count_change", 0) < 0:
+                p_evt_type = (prior_evt.get("event_type") or "").lower()
+                if p_dt >= seven_days_ago and p_evt_type in MORTALITY_EVENT_TYPES and prior_evt.get("count_change", 0) < 0:
                     rolling_losses += abs(int(prior_evt.get("count_change", 0)))
             except Exception:
                 continue
 
-        feat_vector = [pct_change, is_loss, loss_magnitude, days_interval, float(rolling_losses)]
+        feat_vector = [pct_change, is_mortality_loss, loss_magnitude, days_interval, float(rolling_losses)]
         features.append(feat_vector)
         processed_metadata.append({
             "id": evt.get("id"),
@@ -116,10 +123,10 @@ def evaluate_deterministic_rules(
 ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
     """
     Evaluates clinical and operational thresholds across the ledger:
-      - Single-day mortality > 3% or > 5 poultry / > 1 livestock
+      - Single-day mortality > 3% or > 5 poultry / > 1 livestock (MORTALITY events only)
       - 7-day rolling mortality > 5% of species herd
       - Multi-day consecutive mortality streaks (>= 2 days)
-      - Unexplained count reductions (> 10% drop on count_update/loss)
+      - Unexplained count reductions (> 10% drop on count_update without notes)
       - Cross-reference active health symptoms in health_logs and farm_memories
     """
     issues = []
@@ -129,6 +136,7 @@ def evaluate_deterministic_rules(
 
     # 1. Evaluate Recent Ledger Events (Last 7 Days)
     recent_losses_by_species: Dict[str, int] = {}
+    recent_sales_by_species: Dict[str, int] = {}
     mortality_dates_by_species: Dict[str, set] = {}
     unexplained_drops: List[Dict[str, Any]] = []
 
@@ -148,7 +156,8 @@ def evaluate_deterministic_rules(
             prev_total = max(1, new_total)
 
         if evt_dt >= seven_days_ago:
-            if change < 0:
+            # A. Evaluate True Biological Mortality Losses
+            if event_type in MORTALITY_EVENT_TYPES and change < 0:
                 abs_loss = abs(change)
                 recent_losses_by_species[species] = recent_losses_by_species.get(species, 0) + abs_loss
                 mortality_dates_by_species.setdefault(species, set()).add(evt_dt.strftime("%Y-%m-%d"))
@@ -180,8 +189,12 @@ def evaluate_deterministic_rules(
                     if max_severity != "CRITICAL":
                         max_severity = "WARNING"
 
-            # Check Unexplained Population Drop (count_update or loss with > 10% decrease)
-            if event_type in ("count_update", "loss") and change < 0:
+            # B. Track Normal Commercial Sales / Transfers
+            elif event_type in COMMERCIAL_EVENT_TYPES and change < 0:
+                recent_sales_by_species[species] = recent_sales_by_species.get(species, 0) + abs(change)
+
+            # C. Check Unexplained Count Drop (count_update with > 10% decrease)
+            elif event_type in ("count_update", "loss") and change < 0:
                 pct_drop = (abs(change) / prev_total) * 100.0
                 if pct_drop >= 10.0:
                     unexplained_drops.append({
@@ -319,6 +332,7 @@ def evaluate_deterministic_rules(
 
     summary_stats = {
         "recent_losses_by_species": recent_losses_by_species,
+        "recent_sales_by_species": recent_sales_by_species,
         "current_totals": current_totals,
         "correlated_symptoms_count": len(correlated_symptoms),
         "total_issues_count": len(issues)

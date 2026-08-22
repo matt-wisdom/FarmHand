@@ -118,18 +118,9 @@
         </div>
       </div>
 
-      <div class="sidebar-footer-ram">
-        <div class="ram-status-row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-            <line x1="6" y1="6" x2="6.01" y2="6"></line>
-            <line x1="6" y1="18" x2="6.01" y2="18"></line>
-          </svg>
-          <span class="ram-title">RAM Footprint</span>
-          <span class="ram-badge-live">{{ health.process_ram_mb || 0 }} MB</span>
-        </div>
-        <div class="sys-ram-sub">System: {{ health.system_ram_percent || 0 }}% used ({{ health.system_ram_used_mb || 0 }} MB)</div>
+      <div class="sidebar-footer-status">
+        <span class="status-indicator-dot"></span>
+        <span class="status-indicator-text">Offline AI Active</span>
       </div>
     </aside>
 
@@ -491,21 +482,6 @@
             </div>
           </div>
 
-          <!-- Bottom Edge AI Diagnostics Bar -->
-          <div class="system-diag-bar">
-            <div>
-              <strong>Edge AI:</strong> Local Qwen 2.5 3B Instruct (GGUF)
-            </div>
-            <div>
-              <strong>Knowledge Chunks:</strong> {{ health.vector_count || 24224 }} FAISS Vectors
-            </div>
-            <div>
-              <strong>Process Memory:</strong> {{ health.process_ram_mb || 0 }} MB <span style="color: var(--text-muted);">(System: {{ health.system_ram_percent || 0 }}%)</span>
-            </div>
-            <div>
-              <strong>Active Sessions:</strong> {{ threads.length }}
-            </div>
-          </div>
         </section>
 
         <!-- VIEW TAB 3: EXPENDITURES TAB -->
@@ -740,35 +716,11 @@
                 </div>
               </div>
             </div>
-
-            <!-- Global Documents -->
-            <div class="kb-doc-group" v-if="knowledgeDocuments.global.length > 0">
-              <h3 class="kb-doc-heading">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="2" y1="12" x2="22" y2="12"></line>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                </svg>
-                Built-in Knowledge ({{ knowledgeDocuments.global.length }})
-              </h3>
-              <div class="kb-doc-list">
-                <div v-for="doc in knowledgeDocuments.global" :key="doc.filename" class="kb-doc-item kb-doc-global">
-                  <div class="kb-doc-info">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    <span class="kb-doc-name">{{ doc.filename }}</span>
-                    <span class="kb-doc-meta">{{ doc.chunk_count }} chunks</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <!-- Empty State -->
-          <div class="kb-empty" v-else-if="!isLoadingDocuments">
-            <p>No documents uploaded yet. Upload PDFs above to add custom knowledge.</p>
+          <!-- Empty State (Shown when no farm documents uploaded) -->
+          <div class="kb-empty" v-if="!isLoadingDocuments && knowledgeDocuments.farm.length === 0">
+            <p>No custom documents uploaded yet for this farm. Upload PDF guides or records above to add specialized knowledge.</p>
           </div>
 
           <!-- Loading -->
