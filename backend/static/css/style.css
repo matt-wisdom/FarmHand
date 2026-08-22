@@ -1100,25 +1100,27 @@ html, body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(17, 24, 39, 0.45);
+  background-color: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 200;
+  padding: 16px;
 }
 
 .modal-card {
-  background: var(--bg-secondary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  width: 92%;
+  width: 100%;
   max-width: 520px;
+  box-shadow: none;
   overflow: hidden;
 }
 
 .modal-header-bar {
-  padding: 16px 22px;
-  background: var(--bg-tertiary);
+  padding: 18px 24px;
+  background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -1165,10 +1167,11 @@ html, body {
 }
 
 .modal-body-content {
-  padding: 22px 28px;
+  padding: 20px 24px;
+  background-color: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .form-group {
@@ -1244,11 +1247,12 @@ html, body {
 }
 
 .modal-footer-bar {
-  padding: 16px 28px;
-  background-color: var(--bg-tertiary);
+  padding: 16px 24px;
+  background-color: var(--bg-secondary);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   border-top: 1px solid var(--border-subtle);
 }
 

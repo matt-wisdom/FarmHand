@@ -800,18 +800,14 @@
     <!-- MODAL: CREATE / EDIT FARM PROFILE -->
     <div v-if="showFarmModal" class="modal-overlay" @click.self="showFarmModal = false">
       <div class="modal-card">
-        <div class="modal-header-hero">
-          <div class="hero-icon-badge">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        <div class="modal-header-bar">
+          <h3>{{ isEditingFarm ? 'Edit Farm Settings' : 'Setup Your Farm Workspace' }}</h3>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showFarmModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
-          </div>
-          <div class="hero-text-content">
-            <h3 class="hero-title">{{ isEditingFarm ? 'Edit Farm Settings' : 'Setup Your Farm Workspace' }}</h3>
-            <p class="hero-subtitle">{{ isEditingFarm ? 'Update your species scope and farm description.' : 'Configure your farm profile to get species-constrained AI intelligence and zero cross-species hallucinations.' }}</p>
-          </div>
-          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showFarmModal = false">✕</button>
+          </button>
         </div>
 
         <div class="modal-body-content">
@@ -922,7 +918,12 @@
       <div class="modal-card">
         <div class="modal-header-bar">
           <h3>Record Farm Expenditure</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddExpenditureModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddExpenditureModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="modal-body-content">
           <div class="form-group">
@@ -950,7 +951,12 @@
       <div class="modal-card">
         <div class="modal-header-bar">
           <h3>Register Farm Animal</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddAnimalModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddAnimalModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="modal-body-content">
           <div class="form-group">
@@ -982,7 +988,12 @@
       <div class="modal-card">
         <div class="modal-header-bar">
           <h3>Log Animal Health Event</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddHealthLogModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddHealthLogModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="modal-body-content">
           <div class="form-group">
@@ -1010,7 +1021,12 @@
       <div class="modal-card">
         <div class="modal-header-bar">
           <h3>Log Flock / Herd Event</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddFlockModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddFlockModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="modal-body-content">
           <div class="form-group">
@@ -1066,7 +1082,12 @@
               'badge-green': !latestAnomaly || latestAnomaly.severity === 'NORMAL'
             }">{{ latestAnomaly ? latestAnomaly.severity : 'NORMAL' }}</span>
           </div>
-          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAnomalyModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAnomalyModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
 
         <div class="modal-body-content" style="overflow-y: auto; flex: 1; padding: 20px 24px; font-size: 0.92rem; line-height: 1.6; color: var(--text-main);">
@@ -1099,7 +1120,12 @@
       <div class="modal-card">
         <div class="modal-header-bar">
           <h3>Log Clinical Observation</h3>
-          <button class="icon-btn" style="width: 32px; height: 32px;" @click="showAddMemoryModal = false">✕</button>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddMemoryModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div class="modal-body-content">
           <div class="form-group">
