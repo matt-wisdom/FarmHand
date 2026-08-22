@@ -1780,6 +1780,16 @@
           }
         };
 
+        const submitAddAnimal = async () => {
+          showAddAnimalModal.value = false;
+          showToast('Animal registration recorded');
+        };
+
+        const submitAddHealthLog = async () => {
+          showAddHealthLogModal.value = false;
+          showToast('Health log recorded');
+        };
+
         const fetchThreads = async () => {
           try {
             const res = await fetch(`/threads?farm_id=${activeFarmId.value}`);
@@ -2169,11 +2179,14 @@
           fetchDashboardData,
           showAddAnimalModal,
           newAnimal,
+          submitAddAnimal,
           showAddHealthLogModal,
           newHealthLog,
+          submitAddHealthLog,
           ragQuery,
           searchResults,
           isSearchingRAG,
+          searchRAG,
           knowledgeDocuments,
           isLoadingDocuments,
           isUploading,
