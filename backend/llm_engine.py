@@ -20,8 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
 
-# Hardware-scaled CPU threads and optimized context length for fast edge inference
-N_CTX = 2048
+# Hardware-scaled CPU threads and full 4k context window
+N_CTX = 4096
 N_THREADS = max(1, os.cpu_count() or 4)
 
 # --- FIX A: minimum similarity score required to trust a RAG hit ---
