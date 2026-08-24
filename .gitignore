@@ -15,13 +15,16 @@ build/
 .env
 .DS_Store
 *.log
-*.db
-*.index
 *.lock
-data/farm_local.db
-data/knowledge_base/
-models/
-*.gguf
 *.fuse_hidden*
 .fuse_hidden*
+*farmhand.db
 node_modules/
+
+# Ignore large downloaded model weights & local caches
+*.gguf
+backend/models/fastembed_cache/
+backend/models/translator/
+backend/models/miewid_model.onnx*
+data/knowledge_base/
+backend/data/
