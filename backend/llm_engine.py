@@ -68,24 +68,46 @@ def build_tools_json_schema() -> dict[str, Any]:
     }
 
 
-def get_routing_system_prompt() -> dict[str, str]:
-    """Universal routing prompt with strict animal acquisition vs financial expense fidelity."""
+def get_routing_system_prompt(farm_id: str = "default_farm") -> dict[str, str]:
+    """Universal routing prompt with strict animal acquisition vs financial expense fidelity and active farm grounding."""
+    from database import get_farm_by_id, normalize_species_name
+
+    farm = get_farm_by_id(farm_id)
+    farm_name = farm.get("name", "General Farm") if farm else "General Farm"
+    farm_type = farm.get("farm_type", "General") if farm else "General"
+    farm_desc = farm.get("description", "") if farm else ""
+
+    norm_species = ""
+    if farm_type and farm_type.lower() not in ("general", "other", "mixed"):
+        norm_species = normalize_species_name(farm_type).lower()
+
+    farm_context_header = (
+        "ACTIVE FARM SCOPE & IDENTITY:\n"
+        f"- Active Farm: {farm_name}\n"
+        f"- Target Farm Species: {farm_type}"
+        + (f" (Canonical tool species: '{norm_species}')\n" if norm_species else "\n")
+        + (f"- Farm Profile Notes: {farm_desc}\n" if farm_desc else "")
+        + f"- CRITICAL SCOPE RULE: This farm is a {farm_type} farm. Unless the farmer explicitly specifies a different animal by name (e.g. mentions 'goat' on a poultry farm), ALWAYS default all flock registrations, inventory checks, feed formulations, observations, and veterinary search queries to '{norm_species or farm_type.lower()}'. NEVER assume or default to goats on a {farm_type} farm!\n\n"
+    )
+
     return {
         "role": "system",
         "content": (
             "You are the tool routing engine for FarmHand AI.\n"
             "Output ONLY a valid JSON array with the single best tool call.\n\n"
+            f"{farm_context_header}"
             "CRITICAL ROUTING RULES:\n"
             "1. ANIMAL ACQUISITIONS & FLOCK HEADCOUNTS (register_flock, list_animals):\n"
-            "   - When the farmer mentions acquiring, buying, adding, hatching, or owning animals (e.g. 'I just bought 20 chickens', 'Just acquired 200 fingerlings of tilapia', 'bought 10 cows', 'We currently have 9 goats', 'we hatched 50 chicks', '10 chickens died'):\n"
+            "   - When the farmer mentions acquiring, buying, adding, hatching, or owning animals (e.g. 'I just bought 20', 'Just acquired 200 fingerlings', 'bought 10', 'We currently have 9', 'we hatched 50 chicks', '10 died'):\n"
             "     ALWAYS route to register_flock with event_type='purchase' (or 'initial_count', 'birth', 'mortality') and count matching the number of animals.\n"
+            f"     If the animal species is omitted or implied, use the active farm's species ('{norm_species or farm_type.lower()}').\n"
             "     NEVER route animal headcount acquisitions to write_expenditure unless an explicit currency amount was provided by the farmer.\n"
             "2. OPERATING EXPENSES & FINANCIAL SPENDING (write_expenditure, list_expenditures):\n"
-            "   - Route to write_expenditure ONLY when the farmer explicitly provides a monetary cost, price, or spending amount (e.g. 'Spent 15,000 NGN on goat feed', 'Paid 5000 for antibiotics', 'bought feed for 18000').\n"
+            "   - Route to write_expenditure ONLY when the farmer explicitly provides a monetary cost, price, or spending amount (e.g. 'Spent 15,000 NGN on feed', 'Paid 5000 for antibiotics', 'bought feed for 18000').\n"
             "   - NEVER fabricate or invent financial amounts if none were provided.\n"
             "3. CLINICAL SYMPTOMS & VETERINARY ADVICE (query_knowledge_base):\n"
-            "   - When the farmer describes illness, symptoms, or disease, or asks for clinical guidance (e.g. 'foaming from mouth', 'coughing', 'green diarrhea', 'what is coccidiosis', 'how to treat PPR'):\n"
-            "     ALWAYS route to query_knowledge_base with a targeted veterinary search query matching the exact species and symptoms.\n"
+            "   - When the farmer describes illness, symptoms, or disease, or asks for clinical guidance (e.g. 'foaming from mouth', 'coughing', 'green diarrhea', 'what is coccidiosis', 'how to treat disease'):\n"
+            f"     ALWAYS route to query_knowledge_base with a targeted veterinary search query matching the symptoms and the active farm's species ('{norm_species or farm_type.lower()}').\n"
             "4. FEED RECIPES & MIXTURES (optimize_feed_formulation):\n"
             "   - When the farmer asks for a feed formula, recipe, or cheapest feed mix (e.g. 'mix cheap 100kg broiler feed', 'formulate layer mash', 'catfish feed mix'):\n"
             "     ALWAYS route to optimize_feed_formulation.\n"
@@ -110,11 +132,17 @@ def get_routing_system_prompt() -> dict[str, str]:
             'Farmer: \'bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": "bought 10 cows"}}]\n'
             'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": "initial count"}}]\n'
             'Farmer: \'3 chickens died this morning\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 3, "event_type": "mortality", "notes": "3 chickens died"}}]\n'
-            'Farmer: \'Spent 18,000 on chicken feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "poultry feed", "amount": 18000, "description": "chicken feed purchase"}}]\n'
-            'Farmer: \'1 goat suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR emergency care"}}]\n'
-            'Farmer: \'how to treat coccidiosis in chickens\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry chicken coccidiosis treatment medication amprolium prevention"}}]\n'
+            'Farmer: \'Spent 18,000 on feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 18000, "description": "feed purchase"}}]\n'
+            'Farmer: \'1 animal suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "'
+            + (norm_species or "poultry")
+            + ' sudden death foaming mouth poisoning symptoms emergency care"}}]\n'
+            'Farmer: \'how to treat coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "'
+            + (norm_species or "poultry")
+            + ' coccidiosis treatment medication prevention"}}]\n'
             'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
-            'Farmer: \'how many chickens do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
+            'Farmer: \'how many animals do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "'
+            + (norm_species or "poultry")
+            + '"}}]\n'
         ),
     }
 
@@ -774,7 +802,7 @@ def chat_completion(
     farm_summary = get_system_context_summary(farm_id)
 
     # Step 3: PASS 1 - JSON ROUTING (No logit bias applied here so it CAN output JSON)
-    routing_system = get_routing_system_prompt()
+    routing_system = get_routing_system_prompt(farm_id)
 
     # Build dialogue context from recent messages if multi-turn
     is_follow_up = len(current_query_en.split()) <= 6 or any(
@@ -993,7 +1021,7 @@ def chat_completion_stream(
     farm_summary = get_system_context_summary(farm_id)
 
     # Step 3: PASS 1 - JSON ROUTING
-    routing_system = get_routing_system_prompt()
+    routing_system = get_routing_system_prompt(farm_id)
 
     is_follow_up = len(current_query_en.split()) <= 6 or any(
         w in current_query_en.lower().split()

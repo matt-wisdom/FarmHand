@@ -1,6 +1,11 @@
 from typing import Any
 
-from database import DB_PATH, get_db_connection
+from database import (
+    DB_PATH,
+    get_db_connection,
+    get_farm_by_id,
+    normalize_species_name,
+)
 
 # Deferred import for rag_pipeline to prevent circular dependencies
 _rag_pipeline_module = None
@@ -546,7 +551,7 @@ TOOL_SCHEMAS = [
 
 
 def normalize_tool_arguments(
-    function_name: str, args: dict[str, Any]
+    function_name: str, args: dict[str, Any], farm_id: str = "default_farm"
 ) -> dict[str, Any]:
     """Normalize common argument key variations produced by LLMs in a pure, scalable way."""
     norm_args = dict(args)
@@ -595,11 +600,19 @@ def normalize_tool_arguments(
         return {"species": str(sp).strip()}
 
     elif function_name == "register_flock":
+        farm = get_farm_by_id(farm_id)
+        default_species = (
+            normalize_species_name(farm["farm_type"])
+            if farm
+            and farm.get("farm_type")
+            and farm.get("farm_type").lower() not in ("general", "other", "mixed")
+            else "Poultry"
+        )
         species = (
             norm_args.get("species")
             or norm_args.get("animal_type")
             or norm_args.get("animal")
-            or "Poultry"
+            or default_species
         )
         count_raw = (
             norm_args.get("count")
@@ -698,11 +711,19 @@ def normalize_tool_arguments(
         return {"id": str(aid)}
 
     elif function_name == "log_farm_observation":
+        farm = get_farm_by_id(farm_id)
+        default_species = (
+            normalize_species_name(farm["farm_type"])
+            if farm
+            and farm.get("farm_type")
+            and farm.get("farm_type").lower() not in ("general", "other", "mixed")
+            else "General"
+        )
         sp = (
             norm_args.get("species")
             or norm_args.get("animal_type")
             or norm_args.get("animal")
-            or "General"
+            or default_species
         )
         obs = (
             norm_args.get("observation")
@@ -757,7 +778,7 @@ def execute_tool(
         return {"status": "error", "message": f"Unknown function '{function_name}'"}
     try:
         fn = TOOL_MAP[function_name]
-        clean_args = normalize_tool_arguments(function_name, arguments)
+        clean_args = normalize_tool_arguments(function_name, arguments, farm_id=farm_id)
         import inspect
 
         sig = inspect.signature(fn)
