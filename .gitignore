@@ -22,4 +22,6 @@ data/farm_local.db
 data/knowledge_base/
 models/
 *.gguf
+*.fuse_hidden*
+.fuse_hidden*
 node_modules/
