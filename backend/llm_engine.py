@@ -68,6 +68,57 @@ def build_tools_json_schema() -> dict[str, Any]:
     }
 
 
+def get_routing_system_prompt() -> dict[str, str]:
+    """Universal routing prompt with strict animal acquisition vs financial expense fidelity."""
+    return {
+        "role": "system",
+        "content": (
+            "You are the tool routing engine for FarmHand AI.\n"
+            "Output ONLY a valid JSON array with the single best tool call.\n\n"
+            "CRITICAL ROUTING RULES:\n"
+            "1. ANIMAL ACQUISITIONS & FLOCK HEADCOUNTS (register_flock, list_animals):\n"
+            "   - When the farmer mentions acquiring, buying, adding, hatching, or owning animals (e.g. 'I just bought 20 chickens', 'Just acquired 200 fingerlings of tilapia', 'bought 10 cows', 'We currently have 9 goats', 'we hatched 50 chicks', '10 chickens died'):\n"
+            "     ALWAYS route to register_flock with event_type='purchase' (or 'initial_count', 'birth', 'mortality') and count matching the number of animals.\n"
+            "     NEVER route animal headcount acquisitions to write_expenditure unless an explicit currency amount was provided by the farmer.\n"
+            "2. OPERATING EXPENSES & FINANCIAL SPENDING (write_expenditure, list_expenditures):\n"
+            "   - Route to write_expenditure ONLY when the farmer explicitly provides a monetary cost, price, or spending amount (e.g. 'Spent 15,000 NGN on goat feed', 'Paid 5000 for antibiotics', 'bought feed for 18000').\n"
+            "   - NEVER fabricate or invent financial amounts if none were provided.\n"
+            "3. CLINICAL SYMPTOMS & VETERINARY ADVICE (query_knowledge_base):\n"
+            "   - When the farmer describes illness, symptoms, or disease, or asks for clinical guidance (e.g. 'foaming from mouth', 'coughing', 'green diarrhea', 'what is coccidiosis', 'how to treat PPR'):\n"
+            "     ALWAYS route to query_knowledge_base with a targeted veterinary search query matching the exact species and symptoms.\n"
+            "4. FEED RECIPES & MIXTURES (optimize_feed_formulation):\n"
+            "   - When the farmer asks for a feed formula, recipe, or cheapest feed mix (e.g. 'mix cheap 100kg broiler feed', 'formulate layer mash', 'catfish feed mix'):\n"
+            "     ALWAYS route to optimize_feed_formulation.\n"
+            "5. STRICT SPECIES FIDELITY:\n"
+            "   - chickens / hens / broilers / layers / chicks / birds -> 'poultry'\n"
+            "   - goats / kids / bucks / does -> 'goat'\n"
+            "   - cows / cattle / bulls / calves / heifers -> 'cattle'\n"
+            "   - sheep / rams / ewes / lambs -> 'sheep'\n"
+            "   - pigs / swine / piglets -> 'pig'\n"
+            "   - fish / catfish / tilapia / fingerlings -> 'fish'\n\n"
+            "TOOLS:\n"
+            "- list_animals(species: str, date_str: str): Check animal headcount or how many animals are on the farm.\n"
+            "- register_flock(species: str, count: int, event_type: str, notes: str): Record animals (purchase, birth, initial_count, mortality, sale).\n"
+            "- list_expenditures(category: str): View recorded farm spending.\n"
+            "- write_expenditure(category: str, amount: float, description: str): Record a monetary expense where the farmer explicitly gave an amount.\n"
+            "- log_farm_observation(species: str, observation: str, category: str): Record background setup memory about farm infrastructure or equipment.\n"
+            "- optimize_feed_formulation(target_profile: str, batch_size_kg: float): Calculate least-cost feed formula using Linear Programming.\n"
+            "- query_knowledge_base(search_query: str): Search veterinary manuals for illness, symptoms, treatment, drugs, or care guidance.\n\n"
+            "EXAMPLES:\n"
+            'Farmer: \'I just bought 20 chickens\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 20, "event_type": "purchase", "notes": "bought 20 chickens"}}]\n'
+            'Farmer: \'Just acquired 200 fingerlings of tilapia\' -> [{"function_name": "register_flock", "arguments": {"species": "fish", "count": 200, "event_type": "purchase", "notes": "acquired 200 fingerlings of tilapia"}}]\n'
+            'Farmer: \'bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": "bought 10 cows"}}]\n'
+            'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": "initial count"}}]\n'
+            'Farmer: \'3 chickens died this morning\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 3, "event_type": "mortality", "notes": "3 chickens died"}}]\n'
+            'Farmer: \'Spent 18,000 on chicken feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "poultry feed", "amount": 18000, "description": "chicken feed purchase"}}]\n'
+            'Farmer: \'1 goat suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR emergency care"}}]\n'
+            'Farmer: \'how to treat coccidiosis in chickens\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry chicken coccidiosis treatment medication amprolium prevention"}}]\n'
+            'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
+            'Farmer: \'how many chickens do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
+        ),
+    }
+
+
 def get_llama_grammar() -> LlamaGrammar | None:
     global _llama_grammar_instance
     if _llama_grammar_instance is None:
@@ -723,63 +774,7 @@ def chat_completion(
     farm_summary = get_system_context_summary(farm_id)
 
     # Step 3: PASS 1 - JSON ROUTING (No logit bias applied here so it CAN output JSON)
-    routing_system = {
-        "role": "system",
-        "content": (
-            "You are the tool routing engine for FarmHand AI.\n"
-            "Output ONLY a valid JSON array with the single best tool call.\n\n"
-            "CRITICAL ROUTING RULES:\n"
-            "1. INFORMATIONAL & VETERINARY QUESTIONS / CLINICAL SYMPTOM REPORTS (query_knowledge_base):\n"
-            "   - When the farmer describes ANY illness, symptoms, or sudden mortality with clinical signs (e.g. 'foaming from the mouth', 'foam dey commot', 'weakness', 'coughing', 'diarrhea', 'bloody stool', 'shivering', 'sudden death', 'swollen eye/comb', 'stiff body', 'limping', 'poisoning'), or asks what caused it, or how to treat/prevent it:\n"
-            "     ALWAYS route to query_knowledge_base with a targeted search query describing the species, symptoms, and potential causes (e.g. 'goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care'). NEVER route symptom descriptions or disease queries to register_flock.\n"
-            "2. ACTION & LEDGER COMMANDS (register_flock, write_expenditure, list_animals, list_expenditures):\n"
-            "   - Route to register_flock or write_expenditure ONLY when the user gives an EXPLICIT command to log, record, enter, or update numerical records in the flock/financial ledger (e.g. 'Log the 4 goats that died in the ledger', 'record 4 dead goats in ledger', 'log 3 dead chickens', 'we sold 2 cows', 'I bought 10 chickens', 'we currently have 9 goats').\n"
-            "3. STRICT SPECIES FIDELITY: Always match the exact species in the user query (fish -> fish, poultry/chickens -> poultry, goat -> goat, cattle/cows -> cattle, pig -> pig, sheep -> sheep).\n\n"
-            "TOOLS:\n"
-            "- list_animals(species: str, date_str: str): Check animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
-            "- register_flock(species: str, count: int, event_type: str, notes: str): Explicitly set, record, or update animal headcount in ledger for births, counts, purchases, sales, or mortalities (e.g. 'Log 3 dead chickens in the flock ledger', 'We currently have 9 goats', 'bought 10 cows', 'we sold 3 goats at 15000 each'). For sales, count is negative (e.g. -3) or positive with event_type='sale', and notes include price details.\n"
-            "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
-            "- write_expenditure(category: str, amount: float, description: str): Record a new financial farm operating cost/expense (e.g. feed, medication, vaccines, tools, equipment, labor). Category must match the species or item (e.g. 'goat feed', 'poultry health', 'equipment'). NEVER use for animal sales or revenue.\n"
-            "- log_farm_observation(species: str, observation: str, category: str): Save persistent background setup memory about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing structure, or feeding routines. Use ONLY when the user states background facts about their farm setup.\n"
-            "- optimize_feed_formulation(target_profile: str, batch_size_kg: float): Formulate a balanced feed recipe using Linear Programming and local raw materials for broilers, layers, growers, catfish, pigs, or goats.\n"
-            "- query_knowledge_base(search_query: str): Search veterinary manuals and agricultural knowledge base for feeding, nutrition, care, diseases, illness, symptoms, formulation, treatments, medications, dosage, first-aid, or farming guidance.\n\n"
-            "SPECIES MAPPING:\n"
-            '- chickens / hens / broilers / birds -> "poultry"\n'
-            '- goats / kids / bucks -> "goat"\n'
-            '- cows / cattle / bulls / calves -> "cattle"\n'
-            '- sheep / rams / ewes / lambs -> "sheep"\n'
-            '- pigs / swine / piglets -> "pig"\n'
-            '- fish / catfish / tilapia -> "fish"\n\n'
-            "EXAMPLES:\n"
-            'Farmer: \'1 goat suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care"}}]\n'
-            'Farmer: \'4 of my goats died sudden-sudden and foam dey commot their mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR symptoms"}}]\n'
-            'Farmer: \'what is tetanus in goats\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat tetanus lockjaw bacteria infection causes symptoms"}}]\n'
-            'Farmer: \'what is coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry coccidiosis protozoan parasite causes symptoms"}}]\n'
-            'Farmer: \'what is PPR\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sheep PPR peste des petits ruminants virus symptoms prevention"}}]\n'
-            'Farmer: \'My goat is weak and cant move and the jaw is stuck. the body is also stiff\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat weak unable to move stuck rigid jaw stiff body tetanus"}}]\n'
-            'Farmer: \'One of my goat broke a leg and its limping\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat broken leg fracture first aid treatment"}}]\n'
-            'Farmer: \'how many chickens do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
-            'Farmer: \'how many goats do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "goat"}}]\n'
-            'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
-            'Farmer: \'cheapest feed formula for layers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "layer_mash", "batch_size_kg": 100}}]\n'
-            'Farmer: \'how to formulate 50kg catfish feed\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "catfish_growout", "batch_size_kg": 50}}]\n'
-            'Farmer: \'How can I make a DIY feed for the fishes\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "fish feed formulation DIY homemade low cost ingredients"}}]\n'
-            'Farmer: \'What should i feed day old chicks\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry day old chicks starter feed nutrition brooding"}}]\n'
-            'Farmer: \'how to mix pig feed with local maize\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "pig feed formulation local maize crude protein mix"}}]\n'
-            'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": ""}}]\n'
-            'Farmer: \'I have 5 chickens\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 5, "event_type": "initial_count", "notes": ""}}]\n'
-            'Farmer: \'I bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": ""}}]\n'
-            'Farmer: \'we sold 3 goats at 15000 each\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": -3, "event_type": "sale", "notes": "Sold 3 goats at NGN 15,000 each (Total: NGN 45,000)"}}]\n'
-            'Farmer: \'sold 5 chickens for 20000\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": -5, "event_type": "sale", "notes": "Sold 5 chickens for NGN 20,000"}}]\n'
-            'Farmer: \'Log the 4 goats that died of ppr in the ledger\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": -4, "event_type": "mortality", "notes": "4 goats died of PPR"}}]\n'
-            'Farmer: \'record 4 dead goats in the ledger\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": -4, "event_type": "mortality", "notes": "4 dead goats"}}]\n'
-            'Farmer: \'log 2 dead chickens in the flock ledger\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": -2, "event_type": "mortality", "notes": "2 dead chickens"}}]\n'
-            'Farmer: \'Record 15,000 NGN spent on goat feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "goat feed", "amount": 15000, "description": "15,000 NGN spent on goat feed"}}]\n'
-            'Farmer: \'Spent 8000 on poultry vaccines\' -> [{"function_name": "write_expenditure", "arguments": {"category": "poultry health", "amount": 8000, "description": "Spent 8000 on poultry vaccines"}}]\n'
-            'Farmer: \'I have a floodlight in the goat pen\' -> [{"function_name": "log_farm_observation", "arguments": {"species": "goat", "category": "infrastructure", "observation": "Has a floodlight installed in the goat pen"}}]\n'
-            'Farmer: \'how much have i spent this month\' -> [{"function_name": "list_expenditures", "arguments": {}}]'
-        ),
-    }
+    routing_system = get_routing_system_prompt()
 
     # Build dialogue context from recent messages if multi-turn
     is_follow_up = len(current_query_en.split()) <= 6 or any(
@@ -998,48 +993,7 @@ def chat_completion_stream(
     farm_summary = get_system_context_summary(farm_id)
 
     # Step 3: PASS 1 - JSON ROUTING
-    routing_system = {
-        "role": "system",
-        "content": (
-            "You are the tool routing engine for FarmHand AI.\n"
-            "Output ONLY a valid JSON array with the single best tool call.\n\n"
-            "CRITICAL ROUTING RULES:\n"
-            "1. INFORMATIONAL & VETERINARY QUESTIONS / CLINICAL SYMPTOM REPORTS (query_knowledge_base):\n"
-            "   - When the farmer describes ANY illness, symptoms, or sudden mortality with clinical signs (e.g. 'foaming from the mouth', 'foam dey commot', 'weakness', 'coughing', 'diarrhea', 'bloody stool', 'shivering', 'sudden death', 'swollen eye/comb', 'stiff body', 'limping', 'poisoning'), or asks what caused it, or how to treat/prevent it:\n"
-            "     ALWAYS route to query_knowledge_base with a targeted search query describing the species, symptoms, and potential causes (e.g. 'goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care'). NEVER route symptom descriptions or disease queries to register_flock.\n"
-            "2. ACTION & LEDGER COMMANDS (register_flock, write_expenditure, list_animals, list_expenditures):\n"
-            "   - Route to register_flock or write_expenditure ONLY when the user gives an EXPLICIT command to log, record, enter, or update numerical records in the flock/financial ledger (e.g. 'Log the 4 goats that died in the ledger', 'record 4 dead goats in ledger', 'log 3 dead chickens', 'we sold 2 cows', 'I bought 10 chickens', 'we currently have 9 goats').\n"
-            "3. STRICT SPECIES FIDELITY: Always match the exact species in the user query (fish -> fish, poultry/chickens -> poultry, goat -> goat, cattle/cows -> cattle, pig -> pig, sheep -> sheep).\n\n"
-            "TOOLS:\n"
-            "- list_animals(species: str, date_str: str): Check animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
-            "- register_flock(species: str, count: int, event_type: str, notes: str): Explicitly set, record, or update animal headcount in ledger for births, counts, purchases, sales, or mortalities (e.g. 'Log 3 dead chickens in the flock ledger', 'We currently have 9 goats', 'bought 10 cows', 'we sold 3 goats at 15000 each'). For sales, count is negative (e.g. -3) or positive with event_type='sale', and notes include price details.\n"
-            "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
-            "- write_expenditure(category: str, amount: float, description: str): Record a new financial farm operating cost/expense (e.g. feed, medication, vaccines, tools, equipment, labor). Category must match the species or item (e.g. 'goat feed', 'poultry health', 'equipment'). NEVER use for animal sales or revenue.\n"
-            "- log_farm_observation(species: str, observation: str, category: str): Save persistent background setup memory about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing structure, or feeding routines. Use ONLY when the user states background facts about their farm setup.\n"
-            "- optimize_feed_formulation(target_profile: str, batch_size_kg: float): Formulate a balanced feed recipe using Linear Programming and local raw materials for broilers, layers, growers, catfish, pigs, or goats.\n"
-            "- query_knowledge_base(search_query: str): Search veterinary manuals and agricultural knowledge base for feeding, nutrition, care, diseases, illness, symptoms, formulation, treatments, medications, dosage, first-aid, or farming guidance.\n\n"
-            "SPECIES MAPPING:\n"
-            '- chickens / hens / broilers / birds -> "poultry"\n'
-            '- goats / kids / bucks -> "goat"\n'
-            '- cows / cattle / bulls / calves -> "cattle"\n'
-            '- sheep / rams / ewes / lambs -> "sheep"\n'
-            '- pigs / swine / piglets -> "pig"\n'
-            '- fish / catfish / tilapia -> "fish"\n\n'
-            "EXAMPLES:\n"
-            'Farmer: \'1 goat suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care"}}]\n'
-            'Farmer: \'4 of my goats died sudden-sudden and foam dey commot their mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR symptoms"}}]\n'
-            'Farmer: \'what is tetanus in goats\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat tetanus lockjaw bacteria infection causes symptoms"}}]\n'
-            'Farmer: \'what is coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry coccidiosis protozoan parasite causes symptoms"}}]\n'
-            'Farmer: \'what is PPR\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sheep PPR peste des petits ruminants virus symptoms prevention"}}]\n'
-            'Farmer: \'how many chickens do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
-            'Farmer: \'how many goats do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "goat"}}]\n'
-            'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
-            'Farmer: \'cheapest feed formula for layers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "layer_mash", "batch_size_kg": 100}}]\n'
-            'Farmer: \'how to formulate 50kg catfish feed\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "catfish_growout", "batch_size_kg": 50}}]\n'
-            'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": ""}}]\n'
-            'Farmer: \'I bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": ""}}]\n'
-        ),
-    }
+    routing_system = get_routing_system_prompt()
 
     is_follow_up = len(current_query_en.split()) <= 6 or any(
         w in current_query_en.lower().split()
