@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -43,7 +43,7 @@ from database import (
     truncate_thread_messages_from,
     update_farm,
 )
-from llm_engine import chat_completion, get_llm
+from llm_engine import chat_completion, chat_completion_stream, get_llm
 from rag_pipeline import (
     UPLOADS_DIR,
     add_document_to_knowledge_base,
@@ -884,6 +884,62 @@ def chat_endpoint(payload: ChatRequest):
         response=assistant_response,
         user_message_id=user_msg_id,
         assistant_message_id=asst_msg_id,
+    )
+
+
+@app.post("/chat/stream", tags=["AI Chat"])
+def chat_stream_endpoint(payload: ChatRequest):
+    """POST /chat/stream: Process user input with real-time SSE token streaming."""
+    thread_id = payload.thread_id
+    user_input = payload.user_input.strip()
+    farm_id = payload.farm_id or "default_farm"
+    language = normalize_language(payload.language)
+
+    if not user_input:
+        raise HTTPException(status_code=400, detail="user_input cannot be empty.")
+
+    # 0. Truncate history if editing a prior message
+    if payload.edit_message_id is not None:
+        truncate_thread_messages_from(thread_id, payload.edit_message_id)
+    elif payload.edit_message_index is not None:
+        truncate_thread_messages_by_index(thread_id, payload.edit_message_index)
+
+    # 1. Fetch thread history from DB
+    history_rows = get_thread_messages(thread_id)
+    messages: list[dict[str, str]] = [
+        {"role": r["role"], "content": r["content"]} for r in history_rows
+    ]
+    messages.append({"role": "user", "content": user_input})
+    user_msg_id = add_chat_message(thread_id, "user", user_input)
+
+    def event_generator():
+        collected_tokens = []
+        try:
+            for token in chat_completion_stream(
+                messages, farm_id=farm_id, thread_id=thread_id, language=language
+            ):
+                collected_tokens.append(token)
+                yield f"data: {json.dumps({'token': token})}\n\n"
+
+            full_response = "".join(collected_tokens).strip()
+            asst_msg_id = add_chat_message(thread_id, "assistant", full_response)
+            yield f"data: {json.dumps({'done': True, 'full_response': full_response, 'user_message_id': user_msg_id, 'assistant_message_id': asst_msg_id})}\n\n"
+        except Exception as e:
+            logger.error(
+                f"[API /chat/stream] Error during streaming: {e}", exc_info=True
+            )
+            err_msg = f"Internal system error: {e!s}"
+            add_chat_message(thread_id, "assistant", err_msg)
+            yield f"data: {json.dumps({'error': err_msg})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

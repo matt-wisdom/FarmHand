@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import time
 from pathlib import Path
@@ -19,9 +20,9 @@ BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
 
-# 2 physical CPU cores on Intel Core i7-7500U to maximize CPU throughput
-N_CTX = 4096
-N_THREADS = 2
+# Hardware-scaled CPU threads and optimized context length for fast edge inference
+N_CTX = 2048
+N_THREADS = max(1, os.cpu_count() or 4)
 
 # --- FIX A: minimum similarity score required to trust a RAG hit ---
 # Tune this against your embedding model's actual score distribution. If your
@@ -88,6 +89,8 @@ def get_llm() -> Llama | None:
                 model_path=str(MODEL_PATH),
                 n_ctx=N_CTX,
                 n_threads=N_THREADS,
+                n_threads_batch=N_THREADS,
+                n_batch=512,
                 chat_format="chatml",
                 verbose=False,
             )
@@ -506,7 +509,8 @@ def generate_stateless_answer(
     norm_lang: str,
     db_summary: str,
     messages: list[dict[str, str]] | None = None,
-) -> str:
+    stream: bool = False,
+):
     """Pass 3: Natural language synthesis using strictly positive prompting and API Chat Wrapper."""
 
     # Budget context length to prevent exceeding token limits
@@ -631,6 +635,25 @@ def generate_stateless_answer(
     max_gen_tokens = max(128, min(450, N_CTX - est_prompt_tokens - 100))
 
     bias = _english_logit_bias if norm_lang != "pidgin" else _anti_json_logit_bias
+
+    if stream:
+        response_stream = llm.create_completion(
+            prompt=raw_prompt,
+            max_tokens=max_gen_tokens,
+            temperature=0.1,
+            repeat_penalty=1.15,
+            logit_bias=bias,
+            stop=["<|im_end|>", "<|im_start|>"],
+            stream=True,
+        )
+
+        def token_generator():
+            for chunk in response_stream:
+                text = chunk["choices"][0]["text"]
+                if text:
+                    yield text
+
+        return token_generator()
 
     response = llm.create_completion(
         prompt=raw_prompt,
@@ -917,3 +940,249 @@ def chat_completion(
     total_time = time.time() - turn_start
     print(f"[llm_engine] TOTAL TURN TIME: {total_time:.2f}s\n")
     return final_output
+
+
+def chat_completion_stream(
+    messages: list[dict[str, str]],
+    farm_id: str = "default_farm",
+    thread_id: str | None = None,
+    language: str = "english",
+):
+    """Streaming generator yielding text tokens for unified multi-turn chat completion."""
+    turn_start = time.time()
+    norm_lang = normalize_language(language)
+    print(
+        f"\n[llm_engine] --- Chat Turn Stream Start | Farm: '{farm_id}' | Lang: '{norm_lang}' ---"
+    )
+
+    user_prompts = [
+        m.get("content", "").strip() for m in messages if m.get("role") == "user"
+    ]
+    last_user_query = user_prompts[-1] if user_prompts else ""
+
+    # Step 1: Translate Hausa input to English for knowledge retrieval if needed
+    effective_messages = []
+    if norm_lang == "hausa":
+        print("[llm_engine] Translating user input from Hausa to English...")
+        for m in messages:
+            if m.get("role") == "user":
+                effective_messages.append(
+                    {
+                        "role": "user",
+                        "content": translate_ha_to_en(m.get("content", "")),
+                    }
+                )
+            else:
+                effective_messages.append(m)
+        current_query_en = (
+            effective_messages[-1]["content"] if effective_messages else last_user_query
+        )
+    else:
+        effective_messages = list(messages)
+        current_query_en = last_user_query
+
+    # Step 2: Instant Grounded Fast Intent Handler strictly for greetings
+    fast_ans = handle_fast_intent(current_query_en, language=norm_lang)
+    if fast_ans:
+        print(
+            f"[llm_engine] Fast greeting handler answered in {time.time() - turn_start:.2f}s"
+        )
+        yield fast_ans
+        return
+
+    llm = get_llm()
+    if llm is None:
+        yield "[Fallback] Model not loaded."
+        return
+
+    farm_summary = get_system_context_summary(farm_id)
+
+    # Step 3: PASS 1 - JSON ROUTING
+    routing_system = {
+        "role": "system",
+        "content": (
+            "You are the tool routing engine for FarmHand AI.\n"
+            "Output ONLY a valid JSON array with the single best tool call.\n\n"
+            "CRITICAL ROUTING RULES:\n"
+            "1. INFORMATIONAL & VETERINARY QUESTIONS / CLINICAL SYMPTOM REPORTS (query_knowledge_base):\n"
+            "   - When the farmer describes ANY illness, symptoms, or sudden mortality with clinical signs (e.g. 'foaming from the mouth', 'foam dey commot', 'weakness', 'coughing', 'diarrhea', 'bloody stool', 'shivering', 'sudden death', 'swollen eye/comb', 'stiff body', 'limping', 'poisoning'), or asks what caused it, or how to treat/prevent it:\n"
+            "     ALWAYS route to query_knowledge_base with a targeted search query describing the species, symptoms, and potential causes (e.g. 'goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care'). NEVER route symptom descriptions or disease queries to register_flock.\n"
+            "2. ACTION & LEDGER COMMANDS (register_flock, write_expenditure, list_animals, list_expenditures):\n"
+            "   - Route to register_flock or write_expenditure ONLY when the user gives an EXPLICIT command to log, record, enter, or update numerical records in the flock/financial ledger (e.g. 'Log the 4 goats that died in the ledger', 'record 4 dead goats in ledger', 'log 3 dead chickens', 'we sold 2 cows', 'I bought 10 chickens', 'we currently have 9 goats').\n"
+            "3. STRICT SPECIES FIDELITY: Always match the exact species in the user query (fish -> fish, poultry/chickens -> poultry, goat -> goat, cattle/cows -> cattle, pig -> pig, sheep -> sheep).\n\n"
+            "TOOLS:\n"
+            "- list_animals(species: str, date_str: str): Check animal headcount, how many animals/birds/goats/cows/sheep are on the farm, or count on a past date.\n"
+            "- register_flock(species: str, count: int, event_type: str, notes: str): Explicitly set, record, or update animal headcount in ledger for births, counts, purchases, sales, or mortalities (e.g. 'Log 3 dead chickens in the flock ledger', 'We currently have 9 goats', 'bought 10 cows', 'we sold 3 goats at 15000 each'). For sales, count is negative (e.g. -3) or positive with event_type='sale', and notes include price details.\n"
+            "- list_expenditures(category: str): View recorded farm expenses or spending.\n"
+            "- write_expenditure(category: str, amount: float, description: str): Record a new financial farm operating cost/expense (e.g. feed, medication, vaccines, tools, equipment, labor). Category must match the species or item (e.g. 'goat feed', 'poultry health', 'equipment'). NEVER use for animal sales or revenue.\n"
+            "- log_farm_observation(species: str, observation: str, category: str): Save persistent background setup memory about farm infrastructure (e.g. floodlights, boreholes, solar), equipment (e.g. incubators, feeders), housing structure, or feeding routines. Use ONLY when the user states background facts about their farm setup.\n"
+            "- optimize_feed_formulation(target_profile: str, batch_size_kg: float): Formulate a balanced feed recipe using Linear Programming and local raw materials for broilers, layers, growers, catfish, pigs, or goats.\n"
+            "- query_knowledge_base(search_query: str): Search veterinary manuals and agricultural knowledge base for feeding, nutrition, care, diseases, illness, symptoms, formulation, treatments, medications, dosage, first-aid, or farming guidance.\n\n"
+            "SPECIES MAPPING:\n"
+            '- chickens / hens / broilers / birds -> "poultry"\n'
+            '- goats / kids / bucks -> "goat"\n'
+            '- cows / cattle / bulls / calves -> "cattle"\n'
+            '- sheep / rams / ewes / lambs -> "sheep"\n'
+            '- pigs / swine / piglets -> "pig"\n'
+            '- fish / catfish / tilapia -> "fish"\n\n'
+            "EXAMPLES:\n"
+            'Farmer: \'1 goat suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR causes emergency care"}}]\n'
+            'Farmer: \'4 of my goats died sudden-sudden and foam dey commot their mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR symptoms"}}]\n'
+            'Farmer: \'what is tetanus in goats\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat tetanus lockjaw bacteria infection causes symptoms"}}]\n'
+            'Farmer: \'what is coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry coccidiosis protozoan parasite causes symptoms"}}]\n'
+            'Farmer: \'what is PPR\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sheep PPR peste des petits ruminants virus symptoms prevention"}}]\n'
+            'Farmer: \'how many chickens do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
+            'Farmer: \'how many goats do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "goat"}}]\n'
+            'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
+            'Farmer: \'cheapest feed formula for layers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "layer_mash", "batch_size_kg": 100}}]\n'
+            'Farmer: \'how to formulate 50kg catfish feed\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "catfish_growout", "batch_size_kg": 50}}]\n'
+            'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": ""}}]\n'
+            'Farmer: \'I bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": ""}}]\n'
+        ),
+    }
+
+    is_follow_up = len(current_query_en.split()) <= 6 or any(
+        w in current_query_en.lower().split()
+        for w in [
+            "it",
+            "its",
+            "they",
+            "them",
+            "this",
+            "these",
+            "issue",
+            "next",
+            "why",
+            "ok",
+            "how",
+        ]
+    )
+    if len(messages) > 1 and is_follow_up:
+        recent_user_topics = [
+            m["content"].strip()
+            for m in messages[-4:-1]
+            if m.get("role") == "user" and m.get("content")
+        ]
+        if recent_user_topics:
+            router_query_content = f"Recent Topics: {'; '.join(recent_user_topics[-2:])}\nFarmer: '{current_query_en}'"
+        else:
+            router_query_content = f"Farmer: '{current_query_en}'"
+    else:
+        router_query_content = f"Farmer: '{current_query_en}'"
+
+    routing_messages = [
+        routing_system,
+        {"role": "user", "content": router_query_content},
+    ]
+    grammar = get_llama_grammar()
+
+    print("[llm_engine] Running Pass 1 (Router)...")
+    response_pass1 = llm.create_chat_completion(
+        messages=routing_messages,
+        max_tokens=128,
+        temperature=0.0,
+        grammar=grammar,
+        stop=["<|im_end|>", "<|im_start|>"],
+    )
+
+    text_pass1 = response_pass1["choices"][0]["message"]["content"].strip()
+    is_tool_call, tool_calls = parse_tool_calls(text_pass1)
+
+    # Step 4: Execute Tools
+    tool_results = []
+    rag_context = ""
+
+    if is_tool_call:
+        for call in tool_calls:
+            fn_name = call["function_name"]
+            fn_args = call.get("arguments", {})
+            print(f"[llm_engine] Executing tool '{fn_name}' with args {fn_args}")
+            res = execute_tool(fn_name, fn_args, farm_id=farm_id)
+            tool_results.append({"tool": fn_name, "result": res})
+
+            if (
+                fn_name == "query_knowledge_base"
+                and isinstance(res, dict)
+                and "context_prompt" in res
+            ):
+                rag_context = res["context_prompt"]
+
+    if not is_tool_call and len(current_query_en) > 5:
+        print("[llm_engine] Pass 1 yielded no tools, falling back to RAG safety net...")
+        rag_hits = search_knowledge_base(current_query_en, top_k=2)
+        relevant_hits = filter_relevant_rag_hits(rag_hits)
+
+        if relevant_hits:
+            rag_context = "\n---\n".join(
+                [
+                    f"[{h.get('filename')}]: {h.get('text')[:250]}"
+                    for h in relevant_hits
+                    if len(h.get("text", "")) > 50
+                ]
+            )
+        else:
+            print(
+                "[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise."
+            )
+
+    # Inject semantically matching farm memories into RAG context
+    try:
+        import farm_memory
+
+        matching_mems = farm_memory.search_farm_memories(
+            farm_id=farm_id, query=current_query_en, top_k=3
+        )
+        if matching_mems:
+            mem_block = farm_memory.format_memories_for_rag(matching_mems)
+            rag_context = f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
+            print(
+                f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context."
+            )
+    except Exception as e:
+        print(f"[llm_engine] Semantic memory retrieval notice: {e}")
+
+    # Step 5: SYNTHESIS / RESULT DISPATCH
+    target_context = (
+        rag_context
+        if rag_context
+        else (format_database_tool_context(tool_results) if tool_results else "")
+    )
+
+    if norm_lang == "hausa":
+        # For Hausa: generate English and translate
+        raw_output = generate_stateless_answer(
+            llm,
+            target_context,
+            current_query_en,
+            norm_lang,
+            farm_summary,
+            messages=messages,
+            stream=False,
+        )
+        ha_translated = translate_en_to_ha(raw_output)
+        religious_artifacts = [
+            "littafi mai tsarki",
+            "ãdalci",
+            "sikẽlin",
+            "la'ĩmi",
+            "al'ummai",
+            "karin magana",
+        ]
+        if any(art in ha_translated.lower() for art in religious_artifacts):
+            yield raw_output
+        else:
+            yield ha_translated
+    else:
+        # Stream tokens directly for English / Pidgin
+        yield from generate_stateless_answer(
+            llm,
+            target_context,
+            current_query_en,
+            norm_lang,
+            farm_summary,
+            messages=messages,
+            stream=True,
+        )
+
+    total_time = time.time() - turn_start
+    print(f"[llm_engine] TOTAL TURN STREAM TIME: {total_time:.2f}s\n")
