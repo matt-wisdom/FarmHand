@@ -288,7 +288,12 @@
               
               <!-- VIEW MODE -->
               <div v-if="editingMsgId !== (m.id || 'idx_' + idx)" class="msg-bubble">
-                <div class="markdown-body" v-html="renderMarkdown(m.content)"></div>
+                <div v-if="m.role === 'assistant' && !m.content" class="typing-dots">
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                </div>
+                <div v-else class="markdown-body" v-html="renderMarkdown(m.content)"></div>
                 <button v-if="m.role === 'user'" class="msg-edit-btn" @click="startEditingMessage(m, idx)" title="Edit message & rerun">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
@@ -305,17 +310,6 @@
                   <button class="btn-green btn-xs" @click="submitEditMessage(idx)" :disabled="isSending">
                     {{ isSending ? 'Saving...' : 'Save & Rerun' }}
                   </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="isSending" class="msg-row assistant">
-              <div class="msg-avatar">FH</div>
-              <div class="msg-bubble">
-                <div class="typing-dots">
-                  <div class="typing-dot"></div>
-                  <div class="typing-dot"></div>
-                  <div class="typing-dot"></div>
                 </div>
               </div>
             </div>
