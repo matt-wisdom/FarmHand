@@ -19,6 +19,7 @@ from database import (
     create_chat_thread,
     create_farm,
     delete_chat_thread,
+    delete_expenditure,
     delete_farm,
     delete_farm_memory,
     get_active_farm_memories,
@@ -41,6 +42,7 @@ from database import (
     resolve_farm_memory,
     truncate_thread_messages_by_index,
     truncate_thread_messages_from,
+    update_expenditure,
     update_farm,
 )
 from llm_engine import chat_completion, chat_completion_stream, get_llm
@@ -456,6 +458,35 @@ def create_farm_expenditure_endpoint(farm_id: str, payload: ExpenditureRequest):
         description=payload.description or "",
     )
     return {"status": "success", "farm_id": farm_id, "expenditure": rec}
+
+
+@app.put("/api/farms/{farm_id}/expenditures/{expenditure_id}", tags=["Expenditures"])
+def update_farm_expenditure_endpoint(
+    farm_id: str, expenditure_id: int, payload: ExpenditureRequest
+):
+    """PUT /api/farms/{farm_id}/expenditures/{expenditure_id}: Edit an existing expenditure."""
+    rec = update_expenditure(
+        farm_id=farm_id,
+        expenditure_id=expenditure_id,
+        category=payload.category,
+        amount=payload.amount,
+        description=payload.description or "",
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Expenditure record not found")
+    return {"status": "success", "farm_id": farm_id, "expenditure": rec}
+
+
+@app.delete("/api/farms/{farm_id}/expenditures/{expenditure_id}", tags=["Expenditures"])
+def delete_farm_expenditure_endpoint(farm_id: str, expenditure_id: int):
+    """DELETE /api/farms/{farm_id}/expenditures/{expenditure_id}: Delete an expenditure."""
+    success = delete_expenditure(farm_id=farm_id, expenditure_id=expenditure_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Expenditure record not found")
+    return {
+        "status": "success",
+        "message": f"Expenditure {expenditure_id} deleted",
+    }
 
 
 @app.get("/api/farms/{farm_id}/health-logs", tags=["Health Records"])

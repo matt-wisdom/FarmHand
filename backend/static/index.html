@@ -533,7 +533,7 @@
         <section v-if="currentTab === 'expenditures'" class="view-container">
           <div class="section-header-flex">
             <h2 class="section-heading">Financial Expenditures</h2>
-            <button class="btn-green" @click="showAddExpenditureModal = true">+ Record Expenditure</button>
+            <button class="btn-green" @click="openCreateExpenditureModal">+ Record Expenditure</button>
           </div>
           <div class="table-container">
             <table class="data-table">
@@ -544,6 +544,7 @@
                   <th>Amount (NGN)</th>
                   <th>Description</th>
                   <th>Timestamp</th>
+                  <th style="text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -553,9 +554,13 @@
                   <td><strong>NGN {{ (e.amount || 0).toLocaleString() }}</strong></td>
                   <td>{{ e.description || '—' }}</td>
                   <td>{{ e.timestamp }}</td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button class="btn-xs btn-outline-muted" @click="openEditExpenditureModal(e)" style="margin-right: 6px; padding: 4px 8px; cursor: pointer;" title="Edit Expenditure">Edit</button>
+                    <button class="btn-xs btn-danger-outline" @click="deleteExpenditure(e.id)" style="padding: 4px 8px; cursor: pointer; color: #ef4444; border: 1px solid #ef4444; background: transparent; border-radius: 4px;" title="Delete Expenditure">Delete</button>
+                  </td>
                 </tr>
                 <tr v-if="expenditures.length === 0">
-                  <td colspan="5" style="text-align: center; color: var(--text-muted);">No recorded expenditures.</td>
+                  <td colspan="6" style="text-align: center; color: var(--text-muted);">No recorded expenditures.</td>
                 </tr>
               </tbody>
             </table>
@@ -906,11 +911,11 @@
       </div>
     </div>
 
-    <!-- MODAL: RECORD EXPENDITURE -->
+    <!-- MODAL: RECORD / EDIT EXPENDITURE -->
     <div v-if="showAddExpenditureModal" class="modal-overlay" @click.self="showAddExpenditureModal = false">
       <div class="modal-card">
         <div class="modal-header-bar">
-          <h3>Record Farm Expenditure</h3>
+          <h3>{{ editingExpenditureId ? 'Edit Farm Expenditure' : 'Record Farm Expenditure' }}</h3>
           <button class="icon-btn" style="width: 28px; height: 28px;" @click="showAddExpenditureModal = false" title="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -932,9 +937,13 @@
             <textarea class="form-control" rows="3" placeholder="Details..." v-model="newExp.description"></textarea>
           </div>
         </div>
-        <div class="modal-footer-bar">
-          <button class="btn-secondary-green" @click="showAddExpenditureModal = false">Cancel</button>
-          <button class="btn-green" @click="submitAddExpenditure">Save Expenditure</button>
+        <div class="modal-footer-bar" style="display: flex; justify-content: space-between; align-items: center;">
+          <button v-if="editingExpenditureId" type="button" class="btn-danger-outline" @click="deleteExpenditure(editingExpenditureId)" style="padding: 8px 14px; border: 1px solid #ef4444; color: #ef4444; background: transparent; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;">Delete</button>
+          <div v-else></div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary-green" @click="showAddExpenditureModal = false">Cancel</button>
+            <button class="btn-green" @click="submitAddExpenditure">{{ editingExpenditureId ? 'Update Expenditure' : 'Save Expenditure' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1735,7 +1744,8 @@
 
         // Modals & Form States
         const showAddExpenditureModal = ref(false);
-        const newExp = ref({ category: '', amount: 0, description: '' });
+        const editingExpenditureId = ref(null);
+        const newExp = ref({ category: '', amount: null, description: '' });
 
         const showAddAnimalModal = ref(false);
         const newAnimal = ref({ id: '', name: '', species: '', breed: '', status: 'Active' });
@@ -2159,22 +2169,73 @@
           }
         };
 
+        const openCreateExpenditureModal = () => {
+          editingExpenditureId.value = null;
+          newExp.value = { category: 'Feed', amount: null, description: '' };
+          showAddExpenditureModal.value = true;
+        };
+
+        const openEditExpenditureModal = (exp) => {
+          editingExpenditureId.value = exp.id;
+          newExp.value = {
+            category: exp.category,
+            amount: exp.amount,
+            description: exp.description || ''
+          };
+          showAddExpenditureModal.value = true;
+        };
+
         const submitAddExpenditure = async () => {
           if (!activeFarmId.value || !newExp.value.amount || newExp.value.amount <= 0) return;
           try {
-            const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newExp.value)
-            });
-            if (res.ok) {
-              showToast('Expenditure Saved');
-              await fetchExpenditures();
-              showAddExpenditureModal.value = false;
-              newExp.value = { category: 'Feed', amount: 0, description: '' };
+            if (editingExpenditureId.value) {
+              const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures/${editingExpenditureId.value}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newExp.value)
+              });
+              if (res.ok) {
+                showToast('Expenditure Updated');
+                await fetchExpenditures();
+                showAddExpenditureModal.value = false;
+                editingExpenditureId.value = null;
+                newExp.value = { category: 'Feed', amount: null, description: '' };
+              }
+            } else {
+              const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newExp.value)
+              });
+              if (res.ok) {
+                showToast('Expenditure Saved');
+                await fetchExpenditures();
+                showAddExpenditureModal.value = false;
+                newExp.value = { category: 'Feed', amount: null, description: '' };
+              }
             }
           } catch (e) {
-            console.error('Error recording expenditure:', e);
+            console.error('Error recording/updating expenditure:', e);
+          }
+        };
+
+        const deleteExpenditure = async (expId) => {
+          if (!activeFarmId.value || !expId) return;
+          if (!confirm('Are you sure you want to delete this expenditure record?')) return;
+          try {
+            const res = await fetch(`/api/farms/${activeFarmId.value}/expenditures/${expId}`, {
+              method: 'DELETE'
+            });
+            if (res.ok) {
+              showToast('Expenditure Deleted');
+              if (showAddExpenditureModal.value) {
+                showAddExpenditureModal.value = false;
+                editingExpenditureId.value = null;
+              }
+              await fetchExpenditures();
+            }
+          } catch (e) {
+            console.error('Error deleting expenditure:', e);
           }
         };
 
@@ -2794,8 +2855,12 @@
           editingMsgId,
           editBuffer,
           showAddExpenditureModal,
+          editingExpenditureId,
           newExp,
+          openCreateExpenditureModal,
+          openEditExpenditureModal,
           submitAddExpenditure,
+          deleteExpenditure,
           fetchExpenditures,
           fetchHealthLogs,
           fetchTelemetry,

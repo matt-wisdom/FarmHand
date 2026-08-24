@@ -449,6 +449,49 @@ def record_expenditure(
         return dict(cursor.fetchone())
 
 
+def update_expenditure(
+    farm_id: str,
+    expenditure_id: int,
+    category: str,
+    amount: float,
+    description: str = "",
+    db_path: Path = DB_PATH,
+) -> dict[str, Any] | None:
+    """Updates an existing operational or financial expenditure."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE expenditures SET category = ?, amount = ?, description = ? WHERE id = ? AND farm_id = ?",
+            (
+                category.strip().lower(),
+                float(amount),
+                description.strip(),
+                expenditure_id,
+                farm_id,
+            ),
+        )
+        if cursor.rowcount == 0:
+            return None
+        cursor.execute("SELECT * FROM expenditures WHERE id = ?", (expenditure_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def delete_expenditure(
+    farm_id: str,
+    expenditure_id: int,
+    db_path: Path = DB_PATH,
+) -> bool:
+    """Deletes an operational or financial expenditure record."""
+    with get_db_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM expenditures WHERE id = ? AND farm_id = ?",
+            (expenditure_id, farm_id),
+        )
+        return cursor.rowcount > 0
+
+
 def get_telemetry_data(
     farm_id: str = "default_farm", limit: int = 50, db_path: Path = DB_PATH
 ) -> list[dict[str, Any]]:
