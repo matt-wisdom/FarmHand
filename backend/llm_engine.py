@@ -87,7 +87,7 @@ def get_routing_system_prompt(farm_id: str = "default_farm") -> dict[str, str]:
         f"- Target Farm Species: {farm_type}"
         + (f" (Canonical tool species: '{norm_species}')\n" if norm_species else "\n")
         + (f"- Farm Profile Notes: {farm_desc}\n" if farm_desc else "")
-        + f"- CRITICAL SCOPE RULE: This farm is a {farm_type} farm. Unless the farmer explicitly specifies a different animal by name (e.g. mentions 'goat' on a poultry farm), ALWAYS default all flock registrations, inventory checks, feed formulations, observations, and veterinary search queries to '{norm_species or farm_type.lower()}'. NEVER assume or default to goats on a {farm_type} farm!\n\n"
+        + f"- CRITICAL SCOPE RULE: This farm is a {farm_type} farm. Default all ambiguous flock registrations, inventory checks, feed formulations, observations, and veterinary search queries to the active farm's species ('{norm_species or farm_type.lower()}'). If the farmer explicitly specifies another animal by name, always respect that requested species.\n\n"
     )
 
     return {
@@ -608,11 +608,11 @@ def generate_stateless_answer(
             "INSTRUCTIONS:\n"
             "- Directly and accurately answer the farmer's question or acknowledge ledger entries.\n"
             "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
-            "  * Follow the active farm species scope shown above. If this is a poultry farm, focus exclusively on poultry (birds, chickens, broilers, layers) unless the farmer asks about another animal.\n"
+            "  * Follow the active farm species scope shown above. When the species is not specified by the farmer, tailor advice to the active farm's species. When the farmer names a specific animal (e.g. goats, chickens, cattle, fish, pigs, sheep), always provide advice for that requested animal.\n"
             "  * If REFERENCE KNOWLEDGE BASE has FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
             "    1. Confirm that the entry is recorded in the ledger (e.g. 'I don record the 20 new chickens inside your flock ledger successfully!').\n"
             "    2. Provide 2-3 quick, high-value initial care tips for the animals (e.g. clean warm pen, anti-stress water, starter feed).\n"
-            "    3. NEVER mention goat health or unrelated sickness when the farmer is just adding new animals.\n"
+            "    3. Do NOT invent unprompted disease diagnoses or jump to unrelated animals when the farmer is just adding new animals.\n"
             "- For feeding & nutrition: explain ingredients, protein needs, local substitutes (e.g. rice bran, fish meal), and preparation steps.\n"
             "- For diseases & symptoms: evaluate symptoms against reference documents, name suspected conditions (e.g. PPR, enterotoxemia/pulpy kidney, plant/chemical poisoning), give supportive first aid, and advise calling a vet.\n"
             "- NEVER output placeholder promises like 'I will log this now', 'I am logging...', 'I go log am now', or 'I go help you record...'. Provide immediate confirmation or clinical advice directly."
@@ -666,11 +666,11 @@ def generate_stateless_answer(
             "INSTRUCTIONS:\n"
             "- Directly and accurately answer the farmer's specific question or confirm ledger updates in natural, clear sentences.\n"
             "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
-            "  * Always tailor all responses to the target species of the active farm profile shown above. If the active farm is a Poultry farm, all general advice, confirmations, and nutrition must focus on poultry (chickens, broilers, layers) unless the farmer explicitly mentions a different animal.\n"
+            "  * Tailor responses to the target species of the active farm profile shown above when the user does not specify an animal. When the farmer explicitly mentions a specific animal (e.g. goats, chickens, cattle, fish, pigs, sheep), always answer for that requested animal.\n"
             "  * When REFERENCE KNOWLEDGE BASE contains a FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
             "    1. Confirm the transaction clearly (e.g. 'Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger. Your total flock balance is now updated.').\n"
             "    2. Provide 2-3 concise, practical next steps (e.g. brooding warmth, clean water with anti-stress vitamins, starter feed).\n"
-            "    3. NEVER say 'I will focus on goat health' or invent disease symptoms when the farmer is simply adding or buying animals.\n"
+            "    3. Do NOT invent unprompted disease symptoms or jump to unrelated animal species when acknowledging a standard animal purchase or headcount addition.\n"
             "    4. NEVER say 'I can record this if you like' when the record is already logged in the database.\n"
             "- For disease names, overviews, or 'what is' questions (e.g. 'tetanus in goats', 'what is tetanus', 'coccidiosis in poultry'): Directly provide a comprehensive, accurate explanation. Always state what the disease is, its causative pathogen (bacteria, virus, or parasite), mode of transmission/infection (e.g. soil bacteria entering puncture wounds), key clinical symptoms (e.g. muscle stiffness, lockjaw, rigid posture), and prevention/control before veterinary care.\n"
             "- For clinical symptoms / sudden death queries (e.g. sudden mortality, foaming from mouth, respiratory distress, scours): Identify the probable suspect diseases based on reference documents (e.g. Enterotoxemia / Pulpy Kidney, acute poisoning/chemical toxin, or acute PPR), explain why, and provide immediate biosecurity and supportive action steps.\n"
