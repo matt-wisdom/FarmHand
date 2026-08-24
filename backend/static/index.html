@@ -901,9 +901,13 @@
           </div>
         </div>
 
-        <div class="modal-footer-bar">
-          <button class="btn-secondary-green" @click="showFarmModal = false">Cancel</button>
-          <button class="btn-green" @click="submitFarmForm">{{ isEditingFarm ? 'Update Farm Settings' : 'Launch Farm Workspace →' }}</button>
+        <div class="modal-footer-bar" style="display: flex; justify-content: space-between; align-items: center;">
+          <button v-if="isEditingFarm && activeFarmId !== 'default_farm'" type="button" class="btn-danger-outline" @click="deleteCurrentFarm" style="padding: 8px 14px; border: 1px solid #ef4444; color: #ef4444; background: transparent; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;">Delete Farm</button>
+          <div v-else></div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary-green" @click="showFarmModal = false">Cancel</button>
+            <button class="btn-green" @click="submitFarmForm">{{ isEditingFarm ? 'Update Farm Settings' : 'Launch Farm Workspace →' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2123,6 +2127,31 @@
           }
         };
 
+        const deleteCurrentFarm = async () => {
+          if (!activeFarmId.value || activeFarmId.value === 'default_farm') {
+            alert('Cannot delete the default farm profile.');
+            return;
+          }
+          const farmName = activeFarm.value?.name || activeFarmId.value;
+          if (!confirm(`Are you sure you want to delete "${farmName}"? All associated livestock, memory, and chat threads will be removed.`)) {
+            return;
+          }
+          try {
+            const res = await fetch(`/farms/${activeFarmId.value}`, { method: 'DELETE' });
+            if (res.ok) {
+              showToast('Farm Profile Deleted');
+              showFarmModal.value = false;
+              await fetchFarms();
+              await switchActiveFarm('default_farm');
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Failed to delete farm profile.');
+            }
+          } catch (e) {
+            console.error('Error deleting farm:', e);
+          }
+        };
+
         const fetchExpenditures = async () => {
           if (!activeFarmId.value) return;
           try {
@@ -2730,6 +2759,7 @@
           openCreateFarmModal,
           openEditFarmModal,
           submitFarmForm,
+          deleteCurrentFarm,
           threads,
           activeThreadId,
           messages,
