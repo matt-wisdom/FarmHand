@@ -70,7 +70,13 @@
               </div>
             </div>
             <div class="farm-dropdown-footer">
-              <button class="btn-edit-farm" @click="openEditFarmModal">⚙ Farm Settings</button>
+              <button class="btn-edit-farm" @click="openEditFarmModal" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>{{ t('farmSettings') }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -104,7 +110,7 @@
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>New Chat</span>
+          <span>{{ t('newChat') }}</span>
         </button>
       </div>
 
@@ -113,14 +119,14 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span class="session-title">{{ th.is_temp ? 'New conversation' : (th.title || 'Conversation') }}</span>
+          <span class="session-title">{{ th.is_temp ? (t('newChat') || 'New conversation') : (th.title || 'Conversation') }}</span>
           <button class="session-del-btn" @click.stop="deleteThread(th.id)" title="Delete session">✕</button>
         </div>
       </div>
 
       <div class="sidebar-footer-status">
         <span class="status-indicator-dot"></span>
-        <span class="status-indicator-text">Offline AI Active</span>
+        <span class="status-indicator-text">FarmHand</span>
       </div>
     </aside>
 
@@ -140,76 +146,87 @@
           </button>
 
           <nav class="nav-links">
-            <div class="nav-link" :class="{ active: currentTab === 'assistant' }" @click="switchTab('assistant')" title="AI Assistant">
+            <div class="nav-link" :class="{ active: currentTab === 'assistant' }" @click="switchTab('assistant')" :title="t('navAssistant')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
               </svg>
-              <span>AI Assistant</span>
+              <span>{{ t('navAssistant') }}</span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'dashboard' }" @click="switchTab('dashboard')" title="Dashboard">
+            <div class="nav-link" :class="{ active: currentTab === 'dashboard' }" @click="switchTab('dashboard')" :title="t('navDashboard')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7"></rect>
                 <rect x="14" y="3" width="7" height="7"></rect>
                 <rect x="14" y="14" width="7" height="7"></rect>
                 <rect x="3" y="14" width="7" height="7"></rect>
               </svg>
-              <span>Dashboard</span>
+              <span>{{ t('navDashboard') }}</span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'expenditures' }" @click="switchTab('expenditures')" title="Expenditures">
+            <div class="nav-link" :class="{ active: currentTab === 'expenditures' }" @click="switchTab('expenditures')" :title="t('navExpenditures')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <line x1="12" y1="1" x2="12" y2="23"></line>
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
               </svg>
-              <span>Expenditures</span>
+              <span>{{ t('navExpenditures') }}</span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'health' }" @click="switchTab('health')" title="Flock Ledger">
+            <div class="nav-link" :class="{ active: currentTab === 'health' }" @click="switchTab('health')" :title="t('navFlock')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
               </svg>
-              <span>Flock Ledger</span>
+              <span>{{ t('navFlock') }}</span>
               <span v-if="latestAnomaly && latestAnomaly.severity === 'CRITICAL'" class="tab-badge-dot rose" title="Critical Anomaly Detected"></span>
               <span v-else-if="latestAnomaly && latestAnomaly.severity === 'WARNING'" class="tab-badge-dot amber" title="Warning Anomaly Detected"></span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'telemetry' }" @click="switchTab('telemetry')" title="IoT Sensors">
+            <div class="nav-link" :class="{ active: currentTab === 'telemetry' }" @click="switchTab('telemetry')" :title="t('navTelemetry')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
                 <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
                 <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
                 <line x1="12" y1="20" x2="12.01" y2="20"></line>
               </svg>
-              <span>IoT Sensors</span>
+              <span>{{ t('navTelemetry') }}</span>
             </div>
 
-            <div class="nav-link" :class="{ active: currentTab === 'knowledge' }" @click="switchTab('knowledge')" title="Knowledge Base">
+            <div class="nav-link" :class="{ active: currentTab === 'knowledge' }" @click="switchTab('knowledge')" :title="t('navKnowledge')">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
               </svg>
-              <span>Knowledge Base</span>
+              <span>{{ t('navKnowledge') }}</span>
             </div>
           </nav>
         </div>
 
-        <button class="icon-btn" @click="toggleTheme" title="Toggle Light/Dark Theme">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-if="isDarkMode">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="1" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-          </svg>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-else>
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn-green" style="padding: 6px 12px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px;" @click="openFeedOptimizerModal(null)" :title="t('navFeedOptimizer')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+              <path d="M8 7h6"></path>
+              <path d="M8 11h8"></path>
+            </svg>
+            <span>{{ t('navFeedOptimizer') }}</span>
+          </button>
+          
+          <button class="icon-btn" @click="toggleTheme" title="Toggle Light/Dark Theme">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-if="isDarkMode">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-else>
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <!-- GLOBAL FLOCK ANOMALY ALERT BANNER (Shown across ALL tabs including Chat) -->
@@ -298,23 +315,23 @@
             <div class="quick-prompts-bar">
               <button class="prompt-chip" @click="userInput = 'Record 15,000 NGN spent on goat feed'">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                Expense: 15k Feed
+                {{ t('quickExpense') }}
               </button>
               <button class="prompt-chip" @click="userInput = 'Log vaccination treatment for animal ANM-001'">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-                Health: Vaccinate ANM-001
+                {{ t('quickVaccine') }}
               </button>
               <button class="prompt-chip" @click="userInput = 'Get latest sensor readings for node_01'">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path><circle cx="12" cy="12" r="2"></circle><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"></path></svg>
-                Telemetry node_01
+                {{ t('quickTelemetry') }}
               </button>
               <button class="prompt-chip" @click="userInput = 'How do I treat cassava mosaic virus?'">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                Query Extension Manual
+                {{ t('quickManual') }}
               </button>
             </div>
             <div class="chat-input-inner">
-              <input type="text" class="chat-input" :placeholder="'Ask FarmHand AI about ' + (activeFarm?.name || 'your farm') + '...'" v-model="userInput" @keyup.enter="sendMessage" :disabled="isSending">
+              <input type="text" class="chat-input" :placeholder="t('askPlaceholder') + ' ' + (activeFarm?.name || t('yourFarm')) + '...'" v-model="userInput" @keyup.enter="sendMessage" :disabled="isSending">
               <button class="btn-green" style="padding: 8px 18px;" @click="sendMessage" :disabled="isSending || !userInput.trim()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -355,6 +372,26 @@
                 Open Assistant
               </button>
             </div>
+          </div>
+
+          <!-- Feed Formulation Banner -->
+          <div class="card" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; border-left: 3px solid var(--accent-green); background: var(--bg-secondary);">
+            <div>
+              <div style="font-weight: 700; font-size: 0.94rem; color: var(--text-main); margin-bottom: 3px; display: flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-green);">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+                  <path d="M8 7h6"></path>
+                  <path d="M8 11h8"></path>
+                </svg>
+                <span>Feed Formulation Engine</span>
+              </div>
+              <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.4;">
+                Linear programming solver optimizing raw materials (Maize, Soya, PKC, GNC, Wheat Offal) to slash feed costs by 15%–30%.
+              </div>
+            </div>
+            <button class="btn-green" style="padding: 7px 14px; font-size: 0.82rem;" @click="openFeedOptimizerModal(null)">
+              Optimize Feed Formula
+            </button>
           </div>
 
           <!-- Top Stat Grid (4 Minimalist Tiles) -->
@@ -525,7 +562,7 @@
               <div style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">
                 Total: <strong style="color: var(--text-main);">{{ totalFlockSize }} heads</strong>
                 <span v-if="Object.keys(flockTotals).length > 0" style="margin-left: 6px;">
-                  — <span v-for="(cnt, sp, idx) in flockTotals" :key="sp">{{ sp }}: {{ cnt }}<span v-if="idx < Object.keys(flockTotals).length - 1">, </span></span>
+                  (<span v-for="(cnt, sp, idx) in flockTotals" :key="sp">{{ sp }}: {{ cnt }}<span v-if="idx < Object.keys(flockTotals).length - 1">, </span></span>)
                 </span>
               </div>
             </div>
@@ -816,16 +853,19 @@
                 <span class="species-label">Cattle</span>
               </div>
 
-              <!-- CROPS -->
-              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Crops' }" @click="farmForm.farm_type = 'Crops'">
+              <!-- PIG / SWINE -->
+              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'Pig' }" @click="farmForm.farm_type = 'Pig'">
                 <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 22V8"></path>
-                  <path d="M12 18c-4 0-7-2-7-6 4 0 7 2 7 6z"></path>
-                  <path d="M12 14c4 0 7-2 7-6-4 0-7 2-7 6z"></path>
-                  <path d="M12 10c-3 0-5-2-5-5 3 0 5 2 5 5z"></path>
-                  <path d="M12 8c3 0 5-2 5-5-3 0-5 2-5 5z"></path>
+                  <ellipse cx="12" cy="13" rx="8" ry="6"></ellipse>
+                  <ellipse cx="12" cy="14" rx="3.2" ry="2"></ellipse>
+                  <circle cx="10.8" cy="14" r="0.6" fill="currentColor"></circle>
+                  <circle cx="13.2" cy="14" r="0.6" fill="currentColor"></circle>
+                  <circle cx="9" cy="10" r="0.8" fill="currentColor"></circle>
+                  <circle cx="15" cy="10" r="0.8" fill="currentColor"></circle>
+                  <path d="M5.5 8.5C4.5 6.5 5 4.5 7 5.5"></path>
+                  <path d="M18.5 8.5C19.5 6.5 19 4.5 17 5.5"></path>
                 </svg>
-                <span class="species-label">Crops</span>
+                <span class="species-label">Pig</span>
               </div>
 
               <!-- FISH -->
@@ -837,17 +877,6 @@
                   <circle cx="15.5" cy="11" r="0.8" fill="currentColor"></circle>
                 </svg>
                 <span class="species-label">Fish</span>
-              </div>
-
-              <!-- GENERAL -->
-              <div class="species-card-btn" :class="{ selected: farmForm.farm_type === 'General' }" @click="farmForm.farm_type = 'General'">
-                <svg class="species-svg-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 17h12v-5H9l-2-4H3v9z"></path>
-                  <path d="M14 8h5l2 4v5h-2"></path>
-                  <circle cx="7" cy="17" r="2.5"></circle>
-                  <circle cx="17" cy="17" r="3.5"></circle>
-                </svg>
-                <span class="species-label">General</span>
               </div>
             </div>
           </div>
@@ -1125,6 +1154,250 @@
       </div>
     </div>
 
+    <!-- MODAL: FEED OPTIMIZER -->
+    <div v-if="showFeedOptimizerModal" class="modal-overlay" @click.self="showFeedOptimizerModal = false">
+      <div class="modal-card" style="max-width: 840px; width: 95%;">
+        <div class="modal-header-bar">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--accent-green-light); display: flex; align-items: center; justify-content: center;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-green);">
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+                <path d="M8 7h6"></path>
+                <path d="M8 11h8"></path>
+              </svg>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--text-main);">Feed Formulation Engine</h3>
+              <span style="font-size: 0.76rem; color: var(--text-muted);">Linear Programming for Livestock & Aquaculture Feeds</span>
+            </div>
+          </div>
+          <button class="icon-btn" style="width: 28px; height: 28px;" @click="showFeedOptimizerModal = false" title="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body-content">
+          <!-- Target Species & Batch Size Selector Grid -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 16px;">
+            <div class="form-group">
+              <label>Target Livestock Feed Profile</label>
+              <select class="form-control" v-model="feedSelectedTargetKey" @change="runFeedOptimizer">
+                <option v-for="t in feedTargets" :key="t.key" :value="t.key">
+                  {{ t.display_name }} ({{ t.target_cp }}% CP)
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Batch Formulation Weight</label>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button v-for="b in [25, 50, 100, 500, 1000]" :key="b" 
+                        type="button"
+                        class="badge" 
+                        :class="feedBatchSize === b ? 'badge-green' : 'badge-subtle'"
+                        style="cursor: pointer; padding: 7px 12px; font-size: 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);"
+                        @click="feedBatchSize = b; runFeedOptimizer()">
+                  {{ b >= 1000 ? '1 Tonne' : b + ' kg' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ingredient Prices Accordion / Toggle -->
+          <div style="margin-bottom: 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--bg-primary);">
+            <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" @click="showPriceCustomizer = !showPriceCustomizer">
+              <span style="font-size: 0.84rem; font-weight: 700; color: var(--text-main);">
+                Raw Material Market Prices (NGN / kg)
+              </span>
+              <span style="font-size: 0.78rem; color: var(--accent-green); font-weight: 600;">
+                {{ showPriceCustomizer ? '▲ Hide Price Table' : '▼ Customize Prices' }}
+              </span>
+            </div>
+            
+            <div v-if="showPriceCustomizer" style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px;">
+              <div v-for="ing in feedIngredients" :key="ing.key" class="form-group">
+                <label style="font-size: 0.72rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">{{ ing.name }}</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">₦</span>
+                  <input type="number" step="10" class="form-control" style="padding: 4px 8px; font-size: 0.82rem;" v-model.number="feedCustomPrices[ing.key]">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+            <button class="btn-green" @click="runFeedOptimizer" :disabled="isOptimizingFeed" style="display: flex; align-items: center; gap: 6px;">
+              <svg v-if="isOptimizingFeed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+                <line x1="12" y1="2" x2="12" y2="6"></line>
+                <line x1="12" y1="18" x2="12" y2="22"></line>
+                <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+              </svg>
+              <span>{{ isOptimizingFeed ? 'Optimizing Formula...' : 'Calculate Optimal Recipe' }}</span>
+            </button>
+          </div>
+
+          <!-- Optimization Results Box -->
+          <div v-if="feedResult" style="border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+            <!-- Summary KPIs -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px;">
+              <div style="background: var(--accent-green-light); border: 1px solid var(--border-green); padding: 10px 14px; border-radius: var(--radius-sm);">
+                <div style="font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--accent-green-dark);">Cost per 50kg Bag</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent-green-dark);">NGN {{ (feedResult.cost_50kg_bag || 0).toLocaleString() }}</div>
+              </div>
+              <div style="background: var(--bg-primary); border: 1px solid var(--border-subtle); padding: 10px 14px; border-radius: var(--radius-sm);">
+                <div style="font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Cost per kg</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">NGN {{ (feedResult.cost_per_kg || 0).toLocaleString() }}</div>
+              </div>
+              <div style="background: var(--bg-primary); border: 1px solid var(--border-subtle); padding: 10px 14px; border-radius: var(--radius-sm);">
+                <div style="font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Total Batch Cost ({{ feedResult.batch_size_kg }}kg)</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">NGN {{ (feedResult.total_batch_cost_ngn || 0).toLocaleString() }}</div>
+              </div>
+              <div style="background: var(--bg-primary); border: 1px solid var(--border-subtle); padding: 10px 14px; border-radius: var(--radius-sm);">
+                <div style="font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Savings vs. Commercial</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent-green);">{{ feedResult.savings_percentage }}% Save</div>
+              </div>
+            </div>
+
+            <!-- Nutritional Achievements -->
+            <div style="margin-bottom: 14px; font-size: 0.84rem; color: var(--text-main); background: var(--bg-primary); padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+              <strong>Nutritional Profile:</strong> 
+              Crude Protein: <span style="color: var(--accent-green); font-weight: 700;">{{ feedResult.achieved_nutrients.crude_protein }}%</span> (Target: {{ feedResult.achieved_nutrients.target_cp }}%) | 
+              Energy: {{ feedResult.achieved_nutrients.metabolizable_energy }} kcal/kg | 
+              Calcium: {{ feedResult.achieved_nutrients.calcium }}% | 
+              Phosphorus: {{ feedResult.achieved_nutrients.available_phosphorus }}% | 
+              Crude Fibre: {{ feedResult.achieved_nutrients.crude_fibre }}%
+            </div>
+
+            <!-- Recipe Breakdown Table -->
+            <h4 style="font-size: 0.88rem; text-transform: uppercase; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">
+              Optimized Mixing Formula ({{ feedResult.batch_size_kg }} kg Total)
+            </h4>
+            <div class="table-container" style="margin-bottom: 16px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Category</th>
+                    <th>Inclusion %</th>
+                    <th>Weight (kg)</th>
+                    <th>Price/kg</th>
+                    <th>Subtotal (NGN)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in feedResult.recipe" :key="item.key">
+                    <td><strong>{{ item.name }}</strong></td>
+                    <td><span class="badge badge-subtle" style="font-size: 0.72rem;">{{ item.category }}</span></td>
+                    <td>{{ item.proportion_percent }}%</td>
+                    <td><strong style="color: var(--accent-green-dark);">{{ item.weight_kg }} kg</strong></td>
+                    <td>NGN {{ (item.price_per_kg || 0).toLocaleString() }}</td>
+                    <td><strong>NGN {{ (item.subtotal_ngn || 0).toLocaleString() }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mixing Guide -->
+            <h4 style="font-size: 0.88rem; text-transform: uppercase; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">
+              Step-by-Step Practical Mixing Guide
+            </h4>
+            <ol style="margin: 0 0 16px 20px; font-size: 0.84rem; line-height: 1.5; color: var(--text-main); display: flex; flex-direction: column; gap: 6px;">
+              <li v-for="(step, idx) in feedResult.mixing_instructions" :key="idx">{{ step }}</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="modal-footer-bar">
+          <button class="btn-secondary-green" @click="showFeedOptimizerModal = false">Close</button>
+          <button v-if="feedResult" class="btn-green" @click="saveCurrentFeedRecipe" style="display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span>Save to Farm Recipes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Green Help Action Button -->
+    <button class="floating-help-btn" @click="showHelpModal = true" :title="t('helpFloatingTooltip')" aria-label="Help & Guide">
+      ?
+    </button>
+
+    <!-- HELP & USER GUIDE MODAL -->
+    <div v-if="showHelpModal" class="modal-overlay" @click.self="showHelpModal = false">
+      <div class="modal-card help-modal-card">
+        <div class="modal-header-bar">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-green); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem;">?</div>
+            <h3 class="modal-title">{{ t('helpModalTitle') }}</h3>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- In-Modal Quick Language Selector -->
+            <div class="help-lang-pills">
+              <button class="help-lang-pill" :class="{ active: selectedLanguage === 'english' }" @click="selectLanguage('english')">English</button>
+              <button class="help-lang-pill" :class="{ active: selectedLanguage === 'hausa' }" @click="selectLanguage('hausa')">Hausa</button>
+              <button class="help-lang-pill" :class="{ active: selectedLanguage === 'pidgin' }" @click="selectLanguage('pidgin')">Pidgin</button>
+            </div>
+            <button class="modal-close-btn" @click="showHelpModal = false" :title="t('close')">✕</button>
+          </div>
+        </div>
+
+        <div class="modal-body-content help-doc-body" style="overflow-y: auto; flex: 1; padding: 24px 32px;">
+          <div class="help-doc-section">
+            <h2 class="help-doc-title">{{ t('helpIntroTitle') }}</h2>
+            <p class="help-doc-intro">{{ t('helpIntroDesc') }}</p>
+          </div>
+
+          <hr class="help-doc-divider">
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">1. {{ t('helpFeature1Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature1Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">2. {{ t('helpFeature2Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature2Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">3. {{ t('helpFeature3Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature3Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">4. {{ t('helpFeature4Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature4Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">5. {{ t('helpFeature5Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature5Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">6. {{ t('helpFeature6Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature6Desc') }}</p>
+          </div>
+
+          <div class="help-doc-section">
+            <h3 class="help-doc-heading">7. {{ t('helpFeature7Title') }}</h3>
+            <p class="help-doc-desc">{{ t('helpFeature7Desc') }}</p>
+          </div>
+        </div>
+
+        <div class="modal-footer-bar" style="justify-content: flex-end;">
+          <button class="btn-green" style="padding: 8px 24px;" @click="showHelpModal = false">{{ t('gotIt') }}</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -1155,7 +1428,128 @@
         const showFarmDropdown = ref(false);
         const showFarmModal = ref(false);
         const isEditingFarm = ref(false);
-        const farmForm = ref({ name: '', farm_type: 'General', description: '' });
+        const farmForm = ref({ name: '', farm_type: 'Poultry', description: '' });
+
+        // Help Page Modal State
+        const showHelpModal = ref(false);
+
+        // Internationalization (i18n) Dictionary for English, Hausa, and Pidgin
+        const i18n = {
+          english: {
+            navAssistant: "AI Assistant",
+            navDashboard: "Dashboard",
+            navExpenditures: "Expenditures",
+            navFlock: "Flock Ledger",
+            navTelemetry: "IoT Sensors",
+            navKnowledge: "Knowledge Base",
+            navFeedOptimizer: "Feed Optimizer",
+            newChat: "New Chat",
+            farmSettings: "Farm Settings",
+            toggleTheme: "Toggle Theme",
+            askPlaceholder: "Ask FarmHand AI about",
+            yourFarm: "your farm",
+            quickExpense: "Expense: 15k Feed",
+            quickVaccine: "Health: Vaccinate ANM-001",
+            quickTelemetry: "Telemetry node_01",
+            quickManual: "Query Extension Manual",
+            helpFloatingTooltip: "Help & Documentation",
+            helpModalTitle: "FarmHand AI Documentation",
+            helpIntroTitle: "About FarmHand AI",
+            helpIntroDesc: "FarmHand AI is an agricultural management system built to assist livestock, poultry, and aquaculture farmers. It combines real-time farm recordkeeping, clinical veterinary advisory, feed formulation, and IoT sensor monitoring in one unified workspace.",
+            helpFeature1Title: "Veterinary Care & Health Advisory",
+            helpFeature1Desc: "Ask questions about animal health, common disease symptoms (e.g., PPR, coccidiosis, Newcastle disease, pneumonia, toxin exposure), biosecurity isolation, and emergency first aid for cattle, sheep, goats, poultry, pigs, and fish.",
+            helpFeature2Title: "Flock & Livestock Ledger",
+            helpFeature2Desc: "Track herd and flock counts with full audit history. Log births, purchases, sales, and mortalities directly through chat or the ledger table.",
+            helpFeature3Title: "Mortality & Outbreak Monitoring",
+            helpFeature3Desc: "Automatic background scans detect unusual mortality spikes, disease clusters, and sudden drops in animal count, issuing alerts directly on the dashboard.",
+            helpFeature4Title: "Farm Expenditure Tracking",
+            helpFeature4Desc: "Record all farm costs including feed purchases, veterinary drugs, vaccines, equipment maintenance, and farm labor to monitor overall operational expenses.",
+            helpFeature5Title: "Feed Formulation Optimizer",
+            helpFeature5Desc: "Formulate balanced, nutritionally complete diets for broilers, layers, goats, and fish using locally available raw materials (maize, soybean meal, wheat offal, rice bran, fish meal, limestone) while minimizing cost.",
+            helpFeature6Title: "Environmental Sensor Telemetry",
+            helpFeature6Desc: "Monitor real-time temperature, humidity, water quality, and environmental parameters from IoT pen sensors to maintain optimal housing conditions.",
+            helpFeature7Title: "Multilingual & Voice Support",
+            helpFeature7Desc: "Interact with FarmHand AI across English, Hausa, and Nigerian Pidgin. Switch language preferences anytime from the sidebar or modal header.",
+            gotIt: "Close Guide",
+            close: "Close"
+          },
+          hausa: {
+            navAssistant: "Mataimakin AI",
+            navDashboard: "Bayanin Gona",
+            navExpenditures: "Kudaden Gona",
+            navFlock: "Littafin Dabbobi",
+            navTelemetry: "Na'urorin Noma",
+            navKnowledge: "Tushen Ilimi",
+            navFeedOptimizer: "Mai Shirya Abinci",
+            newChat: "Sabuwar Hira",
+            farmSettings: "Saitunan Gona",
+            toggleTheme: "Sauya Yanayi",
+            askPlaceholder: "Tambayi FarmHand AI game da",
+            yourFarm: "gonar ku",
+            quickExpense: "Kudin Ciyarwa: 15k",
+            quickVaccine: "Lafiya: Rigakafi",
+            quickTelemetry: "Na'urori node_01",
+            quickManual: "Nemi Jagoran Noma",
+            helpFloatingTooltip: "Taimako da Jagorar Noma",
+            helpModalTitle: "Takardar Bayanin FarmHand AI",
+            helpIntroTitle: "Game da FarmHand AI",
+            helpIntroDesc: "FarmHand AI tsarin kula da gona ne na zamani wanda aka gina domin tallafa wa manoma da makiyaya. Yana taimakawa wajen kula da lafiyar dabbobi, kididdigar dabbobi, lissafin kudaden gona, tsara abinci mai saukin kudi, da lura da yanayin gona.",
+            helpFeature1Title: "Kula da Lafiyar Dabbobi & Magunguna",
+            helpFeature1Desc: "Nemi shawarar gaggawa kan cututtukan dabbobi, alamomin rashin lafiya (kamar PPR, zawo, tari, kumfa a baki, mutuwar kwatsam), alluran rigakafi, da dabarun kare gona daga bazuwar cuta.",
+            helpFeature2Title: "Littafin Kididdigar Dabbobi",
+            helpFeature2Desc: "Rike cikakken bayanin yawan dabbobinku. Rubuta haihuwar dabbobi, saye, sayarwa, da kuma mace-mace domin sanin ainihin adadin dabbobin da ke gona a kowane lokaci.",
+            helpFeature3Title: "Gano Matsaloli da Gargadin Cututtuka",
+            helpFeature3Desc: "Tsarin na lura da canjin yawan dabbobinku a gona domin ba ku sanarwar gaggawa idan an samu yawan mace-mace ko alamun bullar cuta.",
+            helpFeature4Title: "Lissafin Kudaden Gona",
+            helpFeature4Desc: "Rubuta duk kudaden da aka kashe wajen sayen abinci, magunguna, allurai, kayan aiki, da kudin ma'aikata domin sanin kudin da gona ke kashewa.",
+            helpFeature5Title: "Shirya Ingantaccen Abincin Dabbobi",
+            helpFeature5Desc: "Gano yadda za a hada abinci mai gina jiki ga kaji, awaki, da kifi ta amfani da kayan abinci na gida (masara, waken soya, dusa, kifin gari) a kan farashi mafi sauki.",
+            helpFeature6Title: "Na'urorin Lura da Yanayin Muhallin Gona",
+            helpFeature6Desc: "Duba yanayin zafi, danshi, da ingancin ruwa a dakin kaji ko alkalan dabbobi domin kare dabbobi daga cutarwa.",
+            helpFeature7Title: "Zaɓin Harshe (Hausa, Turanci, Pidgin)",
+            helpFeature7Desc: "Kuna iya aiki da FarmHand AI a cikin harshen Hausa, Turanci, ko Pidgin ta hanyar sauya yare a kowane lokaci.",
+            gotIt: "Rufe Jagora",
+            close: "Rufe"
+          },
+          pidgin: {
+            navAssistant: "AI Assistant",
+            navDashboard: "Farm Overview",
+            navExpenditures: "Expenditures",
+            navFlock: "Flock Ledger",
+            navTelemetry: "IoT Sensors",
+            navKnowledge: "Knowledge Base",
+            navFeedOptimizer: "Feed Optimizer",
+            newChat: "New Chat",
+            farmSettings: "Farm Settings",
+            toggleTheme: "Change Theme",
+            askPlaceholder: "Ask FarmHand AI about",
+            yourFarm: "your farm",
+            quickExpense: "Expense: 15k Feed",
+            quickVaccine: "Health: Vaccinate ANM-001",
+            quickTelemetry: "Telemetry node_01",
+            quickManual: "Check Farm Manual",
+            helpFloatingTooltip: "Help & Farm Guide",
+            helpModalTitle: "FarmHand AI User Manual",
+            helpIntroTitle: "About FarmHand AI",
+            helpIntroDesc: "FarmHand AI na complete farm management system wey design to help livestock, poultry, and fish farmers. E dey help you track animal records, get vet advice, calculate low-cost feed recipes, and monitor pen sensors.",
+            helpFeature1Title: "Veterinary Advice & Animal Health",
+            helpFeature1Desc: "Ask question about animal sickness, symptoms (PPR, cough, stooling, foaming for mouth, sudden death), vaccines, isolation, and first aid for chicken, goats, cows, sheep, fish, and pigs.",
+            helpFeature2Title: "Livestock Ledger & Animal Count",
+            helpFeature2Desc: "Keep clean record of all your animals. Log new births, bought animals, sales, and mortalities directly through chat or table.",
+            helpFeature3Title: "Mortality & Outbreak Warnings",
+            helpFeature3Desc: "Automatic background monitoring dey scan your farm records to give you quick alert if mortality high or sickness dey start.",
+            helpFeature4Title: "Farm Expense Tracker",
+            helpFeature4Desc: "Record all farm expenses like feed, medicine, vaccines, tools, and labor to know your exact farm operational costs.",
+            helpFeature5Title: "Feed Formula Optimizer",
+            helpFeature5Desc: "Mix correct nutritious feed for broilers, layers, goats, and fish using cheap local ingredients (maize, soya, wheat offal, rice bran, fish meal, limestone) to reduce cost.",
+            helpFeature6Title: "IoT Pen Sensors",
+            helpFeature6Desc: "Check real-time temperature, humidity, and water quality inside pens make heat or wet ground no disturb animals.",
+            helpFeature7Title: "Language Support",
+            helpFeature7Desc: "Use FarmHand AI in English, Hausa, or Pidgin anytime by changing language in the sidebar or top of this guide.",
+            gotIt: "Close Manual",
+            close: "Close"
+          }
+        };
 
         // Language selector state with rock-solid localStorage persistence & cross-tab sync
         const normalizeLang = (lang) => {
@@ -1210,6 +1604,14 @@
             }
           });
         } catch (e) {}
+
+        const t = (key) => {
+          const lang = selectedLanguage.value || 'english';
+          if (i18n[lang] && i18n[lang][key]) {
+            return i18n[lang][key];
+          }
+          return i18n['english']?.[key] || key;
+        };
 
         // Message Editing state
         const editingMsgId = ref(null);
@@ -1329,6 +1731,109 @@
         const isUploading = ref(false);
         const uploadProgress = ref(0);
 
+        // Feed Formulation Optimizer State
+        const showFeedOptimizerModal = ref(false);
+        const feedTargets = ref([]);
+        const feedIngredients = ref([]);
+        const feedSelectedTargetKey = ref('broiler_starter');
+        const feedBatchSize = ref(100);
+        const feedCustomPrices = ref({});
+        const showPriceCustomizer = ref(false);
+        const feedResult = ref(null);
+        const isOptimizingFeed = ref(false);
+        const savedFeedFormulations = ref([]);
+
+        const fetchFeedTargets = async () => {
+          try {
+            const res = await fetch('/api/feed/targets');
+            const data = await res.json();
+            if (data.status === 'success') {
+              feedTargets.value = data.targets || [];
+              feedIngredients.value = data.ingredients || [];
+              const prices = {};
+              (data.ingredients || []).forEach(ing => {
+                prices[ing.key] = ing.default_price;
+              });
+              feedCustomPrices.value = prices;
+            }
+          } catch (e) {
+            console.error('Error fetching feed targets:', e);
+          }
+        };
+
+        const openFeedOptimizerModal = (targetKey = null) => {
+          if (feedTargets.value.length === 0) {
+            fetchFeedTargets();
+          }
+          if (targetKey) {
+            feedSelectedTargetKey.value = targetKey;
+          } else if (activeFarm.value?.farm_type) {
+            const ft = activeFarm.value.farm_type.toLowerCase();
+            if (ft.includes('poultry') || ft.includes('chicken')) feedSelectedTargetKey.value = 'broiler_starter';
+            else if (ft.includes('fish') || ft.includes('catfish')) feedSelectedTargetKey.value = 'catfish_growout';
+            else if (ft.includes('goat') || ft.includes('sheep')) feedSelectedTargetKey.value = 'goat_feedlot';
+            else if (ft.includes('pig')) feedSelectedTargetKey.value = 'pig_grower';
+          }
+          showFeedOptimizerModal.value = true;
+          if (!feedResult.value) {
+            runFeedOptimizer();
+          }
+        };
+
+        const runFeedOptimizer = async () => {
+          isOptimizingFeed.value = true;
+          try {
+            const payload = {
+              target_profile: feedSelectedTargetKey.value,
+              batch_size_kg: Number(feedBatchSize.value) || 100,
+              ingredient_prices: feedCustomPrices.value
+            };
+            const res = await fetch('/api/feed/optimize', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success) {
+              feedResult.value = data;
+            } else {
+              showToast('Feed optimization notice: ' + (data.error || 'Check ingredient constraints'));
+            }
+          } catch (e) {
+            showToast('Error calculating feed formula: ' + e.message);
+          } finally {
+            isOptimizingFeed.value = false;
+          }
+        };
+
+        const saveCurrentFeedRecipe = async () => {
+          if (!feedResult.value || !activeFarmId.value) return;
+          try {
+            const payload = {
+              name: feedResult.value.target_display_name + ` (${feedResult.value.batch_size_kg}kg)`,
+              target_profile: feedResult.value.target_key,
+              batch_size_kg: feedResult.value.batch_size_kg,
+              cost_per_kg: feedResult.value.cost_per_kg,
+              cost_50kg_bag: feedResult.value.cost_50kg_bag,
+              total_cost: feedResult.value.total_batch_cost_ngn,
+              recipe: feedResult.value.recipe,
+              nutrients: feedResult.value.achieved_nutrients,
+              notes: `Formulated via precision diet optimizer with ${feedResult.value.savings_percentage}% savings.`
+            };
+            const res = await fetch(`/api/farms/${activeFarmId.value}/feed/saved`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              showToast('Feed formulation saved to your farm records!');
+            }
+          } catch (e) {
+            showToast('Error saving recipe: ' + e.message);
+          }
+        };
+
         // Computed
         const activeFarm = computed(() => {
           return farms.value.find(f => f.id === activeFarmId.value) || farms.value[0] || null;
@@ -1343,9 +1848,9 @@
             case 'poultry': return 'PLT';
             case 'goat': return 'GOT';
             case 'cattle': return 'CTL';
-            case 'crops': return 'CRP';
+            case 'pig': return 'PIG';
             case 'fish': return 'FSH';
-            default: return 'GEN';
+            default: return 'LVS';
           }
         };
 
@@ -1542,7 +2047,7 @@
 
         const openCreateFarmModal = () => {
           isEditingFarm.value = false;
-          farmForm.value = { name: '', farm_type: 'General', description: '' };
+          farmForm.value = { name: '', farm_type: 'Poultry', description: '' };
           showFarmDropdown.value = false;
           showFarmModal.value = true;
         };
@@ -2074,6 +2579,7 @@
           }
           await fetchThreads();
           await fetchDashboardData();
+          fetchFeedTargets().catch(err => console.debug('Background feed targets fetch:', err));
 
           // Handle URL session parameter: ?thread=... or ?session=...
           const urlParams = new URLSearchParams(window.location.search);
@@ -2206,7 +2712,23 @@
           startEditingMessage,
           cancelEdit,
           submitEditMessage,
-          renderMarkdown
+          renderMarkdown,
+          showFeedOptimizerModal,
+          feedTargets,
+          feedIngredients,
+          feedSelectedTargetKey,
+          feedBatchSize,
+          feedCustomPrices,
+          showPriceCustomizer,
+          feedResult,
+          isOptimizingFeed,
+          savedFeedFormulations,
+          fetchFeedTargets,
+          openFeedOptimizerModal,
+          runFeedOptimizer,
+          saveCurrentFeedRecipe,
+          showHelpModal,
+          t
         };
       }
     }).mount('#app');

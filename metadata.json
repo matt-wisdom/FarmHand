@@ -1,0 +1,41 @@
+{
+  "team_id": "farmhand-ai-team",
+  "domain": "agriculture",
+  "language_scope": [
+    "en",
+    "ha",
+    "pcm"
+  ],
+  "african_alpha_claim": true,
+  "budget_laptop_claim": true,
+  "submitter": {
+    "name": "FarmHand AI",
+    "email": "matthewwisdom11@gmail.com",
+    "github_handle": "matt-wisdom"
+  },
+  "cross_disciplinary_pairing": {
+    "discipline": "Operations Research & Veterinary Epidemiology",
+    "load_bearing": true,
+    "description": "Linear programming least-cost feed formulation (SciPy LP) and unsupervised IsolationForest disease outbreak surveillance integrated with local Qwen 2.5 reasoning"
+  },
+  "test_prompts": [
+    {
+      "prompt_id": "tp_001",
+      "prompt": "Formulate a balanced broiler starter feed using local Nigerian ingredients with minimum 22% crude protein."
+    },
+    {
+      "prompt_id": "tp_002",
+      "prompt": "4 goats died sudden-sudden and foam dey commot their mouth. Wetin fit cause am and wetin I suppose do immediately?"
+    }
+  ],
+  "model": {
+    "name": "Qwen2.5-3B-Instruct-Q4_K_M-FarmHand",
+    "runtime": "llama.cpp",
+    "quantization": "GGUF Q4_K_M",
+    "parameters_estimate": "3B",
+    "packaging": "binary_bundle"
+  },
+  "_runtime": {
+    "model_path": "backend/models/qwen2.5-3b-instruct.Q4_K_M.gguf"
+  }
+}

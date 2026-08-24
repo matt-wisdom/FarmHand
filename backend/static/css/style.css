@@ -1079,6 +1079,31 @@ html, body {
   color: var(--accent-amber);
 }
 
+/* Custom sleek scrollbar matching dark forest theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-green);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-green);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-green) var(--bg-primary);
+}
+
 /* Modals & Toasts */
 .modal-overlay {
   position: fixed;
@@ -1097,7 +1122,10 @@ html, body {
   border-radius: var(--radius-md);
   width: 100%;
   max-width: 520px;
-  box-shadow: none;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
@@ -1108,6 +1136,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .modal-header-bar h3 {
@@ -1123,6 +1152,12 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer-bar {
+  flex-shrink: 0;
 }
 
 .modal-body-content h1,
@@ -1243,9 +1278,15 @@ html, body {
 
 .species-grid-select {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .species-grid-select {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .species-card-btn {
@@ -1882,6 +1923,129 @@ html, body {
   animation: spin 1s linear infinite;
 }
 
+/* ==========================================================================
+   Floating Green Help Action Button
+   ========================================================================== */
+.floating-help-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  color: #FFFFFF;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 950;
+  transition: all var(--transition-fast);
+  outline: none;
+  font-family: inherit;
+  user-select: none;
+}
 
+.floating-help-btn:hover {
+  background: var(--accent-green-bright);
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
 
+.floating-help-btn:active {
+  transform: translateY(0) scale(0.95);
+}
 
+/* ==========================================================================
+   Multilingual Help Modal Components
+   ========================================================================== */
+.help-modal-card {
+  max-width: 860px;
+  width: 95%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.help-lang-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.help-lang-pill {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.help-lang-pill:hover {
+  color: var(--text-main);
+}
+
+.help-lang-pill.active {
+  background: var(--bg-secondary);
+  color: var(--accent-green);
+  box-shadow: var(--shadow-sm);
+}
+
+.help-doc-body {
+  font-size: 0.93rem;
+  line-height: 1.7;
+  color: var(--text-main);
+  padding: 24px 32px;
+}
+
+.help-doc-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.help-doc-intro {
+  font-size: 0.94rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  margin-bottom: 16px;
+}
+
+.help-doc-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 16px 0 20px 0;
+}
+
+.help-doc-section {
+  margin-bottom: 20px;
+}
+
+.help-doc-heading {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.help-doc-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  margin: 0;
+}

@@ -4,39 +4,48 @@ Combines Classical Machine Learning (IsolationForest & Robust Z-Score / MAD),
 Deterministic Clinical Percentages & Heuristics, and Local LLM Synthesis (Qwen 2.5 3B).
 """
 
-import json
+import logging
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-import database
 from database import (
     DB_PATH,
     get_active_farm_memories,
     get_all_health_logs,
     get_current_flock_totals,
-    get_db_connection,
-    get_farm_by_id,
     get_flock_ledger_history,
     get_system_context_summary,
     save_ledger_anomaly,
 )
 
+logger = logging.getLogger(__name__)
 
 # Event Type Taxonomies
 MORTALITY_EVENT_TYPES = {"mortality", "death", "cull", "loss", "deceased"}
-COMMERCIAL_EVENT_TYPES = {"sale", "sales", "sold", "transfer", "transferred", "harvest", "slaughter"}
+COMMERCIAL_EVENT_TYPES = {
+    "sale",
+    "sales",
+    "sold",
+    "transfer",
+    "transferred",
+    "harvest",
+    "slaughter",
+}
 
 
 # -------------------------------------------------------------------
 # Feature Extraction & Time-Series Preprocessing
 # -------------------------------------------------------------------
 
-def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+
+def extract_ledger_features(
+    events: list[dict[str, Any]],
+) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """
     Extracts numerical feature vectors from chronological ledger events for classical ML models.
     Features:
@@ -69,7 +78,9 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
             prev_total = max(1, new_total)
 
         pct_change = count_change / prev_total
-        is_mortality_loss = 1.0 if (event_type in MORTALITY_EVENT_TYPES and count_change < 0) else 0.0
+        is_mortality_loss = (
+            1.0 if (event_type in MORTALITY_EVENT_TYPES and count_change < 0) else 0.0
+        )
         loss_magnitude = float(abs(count_change)) if is_mortality_loss else 0.0
 
         # Days interval from previous event
@@ -91,22 +102,35 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
                 p_time = prior_evt.get("created_at") or ""
                 p_dt = datetime.fromisoformat(p_time.replace("Z", "+00:00"))
                 p_evt_type = (prior_evt.get("event_type") or "").lower()
-                if p_dt >= seven_days_ago and p_evt_type in MORTALITY_EVENT_TYPES and prior_evt.get("count_change", 0) < 0:
+                if (
+                    p_dt >= seven_days_ago
+                    and p_evt_type in MORTALITY_EVENT_TYPES
+                    and prior_evt.get("count_change", 0) < 0
+                ):
                     rolling_losses += abs(int(prior_evt.get("count_change", 0)))
-            except Exception:
+            except (ValueError, TypeError) as e:
+                logger.debug("Failed to parse prior event timestamp or count: %s", e)
                 continue
 
-        feat_vector = [pct_change, is_mortality_loss, loss_magnitude, days_interval, float(rolling_losses)]
+        feat_vector = [
+            pct_change,
+            is_mortality_loss,
+            loss_magnitude,
+            days_interval,
+            float(rolling_losses),
+        ]
         features.append(feat_vector)
-        processed_metadata.append({
-            "id": evt.get("id"),
-            "species": evt.get("species"),
-            "event_type": evt.get("event_type"),
-            "count_change": count_change,
-            "new_total": new_total,
-            "created_at": curr_time,
-            "notes": evt.get("notes") or ""
-        })
+        processed_metadata.append(
+            {
+                "id": evt.get("id"),
+                "species": evt.get("species"),
+                "event_type": evt.get("event_type"),
+                "count_change": count_change,
+                "new_total": new_total,
+                "created_at": curr_time,
+                "notes": evt.get("notes") or "",
+            }
+        )
 
     return np.array(features, dtype=float), processed_metadata
 
@@ -115,12 +139,13 @@ def extract_ledger_features(events: List[Dict[str, Any]]) -> Tuple[np.ndarray, L
 # Layer 1: Deterministic Rules & Clinical Percentages
 # -------------------------------------------------------------------
 
+
 def evaluate_deterministic_rules(
-    events: List[Dict[str, Any]],
-    health_logs: List[Dict[str, Any]],
-    current_totals: Dict[str, int],
-    farm_memories: Optional[List[Dict[str, Any]]] = None
-) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
+    events: list[dict[str, Any]],
+    health_logs: list[dict[str, Any]],
+    current_totals: dict[str, int],
+    farm_memories: list[dict[str, Any]] | None = None,
+) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """
     Evaluates clinical and operational thresholds across the ledger:
       - Single-day mortality > 3% or > 5 poultry / > 1 livestock (MORTALITY events only)
@@ -135,10 +160,10 @@ def evaluate_deterministic_rules(
     seven_days_ago = now - timedelta(days=7)
 
     # 1. Evaluate Recent Ledger Events (Last 7 Days)
-    recent_losses_by_species: Dict[str, int] = {}
-    recent_sales_by_species: Dict[str, int] = {}
-    mortality_dates_by_species: Dict[str, set] = {}
-    unexplained_drops: List[Dict[str, Any]] = []
+    recent_losses_by_species: dict[str, int] = {}
+    recent_sales_by_species: dict[str, int] = {}
+    mortality_dates_by_species: dict[str, set] = {}
+    unexplained_drops: list[dict[str, Any]] = []
 
     for evt in events:
         c_time = evt.get("created_at") or ""
@@ -159,50 +184,78 @@ def evaluate_deterministic_rules(
             # A. Evaluate True Biological Mortality Losses
             if event_type in MORTALITY_EVENT_TYPES and change < 0:
                 abs_loss = abs(change)
-                recent_losses_by_species[species] = recent_losses_by_species.get(species, 0) + abs_loss
-                mortality_dates_by_species.setdefault(species, set()).add(evt_dt.strftime("%Y-%m-%d"))
+                recent_losses_by_species[species] = (
+                    recent_losses_by_species.get(species, 0) + abs_loss
+                )
+                mortality_dates_by_species.setdefault(species, set()).add(
+                    evt_dt.strftime("%Y-%m-%d")
+                )
 
                 # Check Single-Day Loss Spike
                 pct_loss = (abs_loss / prev_total) * 100.0
                 is_ruminant = species.lower() in ("goat", "cattle", "sheep", "pig")
-                is_critical_spike = pct_loss >= 5.0 or (is_ruminant and abs_loss >= 2) or (not is_ruminant and abs_loss >= 10)
-                is_warning_spike = pct_loss >= 3.0 or (is_ruminant and abs_loss >= 1) or (not is_ruminant and abs_loss >= 5)
+                is_critical_spike = (
+                    pct_loss >= 5.0
+                    or (is_ruminant and abs_loss >= 2)
+                    or (not is_ruminant and abs_loss >= 10)
+                )
+                is_warning_spike = (
+                    pct_loss >= 3.0
+                    or (is_ruminant and abs_loss >= 1)
+                    or (not is_ruminant and abs_loss >= 5)
+                )
 
-                date_str = evt_dt.strftime('%Y-%m-%d')
+                date_str = evt_dt.strftime("%Y-%m-%d")
                 if is_critical_spike:
-                    issues.append({
-                        "type": "MORTALITY_SPIKE",
-                        "severity": "CRITICAL",
-                        "species": species,
-                        "description": f"Severe single-event mortality: {abs_loss} {species} lost ({pct_loss:.1f}% drop on {date_str}).",
-                        "metrics": {"loss_count": abs_loss, "percentage_drop": round(pct_loss, 1), "date": date_str}
-                    })
+                    issues.append(
+                        {
+                            "type": "MORTALITY_SPIKE",
+                            "severity": "CRITICAL",
+                            "species": species,
+                            "description": f"Severe single-event mortality: {abs_loss} {species} lost ({pct_loss:.1f}% drop on {date_str}).",
+                            "metrics": {
+                                "loss_count": abs_loss,
+                                "percentage_drop": round(pct_loss, 1),
+                                "date": date_str,
+                            },
+                        }
+                    )
                     max_severity = "CRITICAL"
                 elif is_warning_spike:
-                    issues.append({
-                        "type": "MORTALITY_ELEVATED",
-                        "severity": "WARNING",
-                        "species": species,
-                        "description": f"Elevated single-event mortality: {abs_loss} {species} lost ({pct_loss:.1f}% drop on {date_str}).",
-                        "metrics": {"loss_count": abs_loss, "percentage_drop": round(pct_loss, 1), "date": date_str}
-                    })
+                    issues.append(
+                        {
+                            "type": "MORTALITY_ELEVATED",
+                            "severity": "WARNING",
+                            "species": species,
+                            "description": f"Elevated single-event mortality: {abs_loss} {species} lost ({pct_loss:.1f}% drop on {date_str}).",
+                            "metrics": {
+                                "loss_count": abs_loss,
+                                "percentage_drop": round(pct_loss, 1),
+                                "date": date_str,
+                            },
+                        }
+                    )
                     if max_severity != "CRITICAL":
                         max_severity = "WARNING"
 
             # B. Track Normal Commercial Sales / Transfers
             elif event_type in COMMERCIAL_EVENT_TYPES and change < 0:
-                recent_sales_by_species[species] = recent_sales_by_species.get(species, 0) + abs(change)
+                recent_sales_by_species[species] = recent_sales_by_species.get(
+                    species, 0
+                ) + abs(change)
 
             # C. Check Unexplained Count Drop (count_update with > 10% decrease)
             elif event_type in ("count_update", "loss") and change < 0:
                 pct_drop = (abs(change) / prev_total) * 100.0
                 if pct_drop >= 10.0:
-                    unexplained_drops.append({
-                        "species": species,
-                        "drop_count": abs(change),
-                        "percentage": round(pct_drop, 1),
-                        "date": evt_dt.strftime("%Y-%m-%d")
-                    })
+                    unexplained_drops.append(
+                        {
+                            "species": species,
+                            "drop_count": abs(change),
+                            "percentage": round(pct_drop, 1),
+                            "date": evt_dt.strftime("%Y-%m-%d"),
+                        }
+                    )
 
     # 2. Check 7-Day Rolling Cumulative Mortality
     for species, total_loss in recent_losses_by_species.items():
@@ -211,22 +264,32 @@ def evaluate_deterministic_rules(
         if baseline > 0:
             rolling_pct = (total_loss / baseline) * 100.0
             if rolling_pct >= 8.0:
-                issues.append({
-                    "type": "ROLLING_7D_MORTALITY_CRITICAL",
-                    "severity": "CRITICAL",
-                    "species": species,
-                    "description": f"Critical 7-day cumulative mortality: {total_loss} {species} lost ({rolling_pct:.1f}% of herd over the past week).",
-                    "metrics": {"7d_losses": total_loss, "cumulative_percentage": round(rolling_pct, 1)}
-                })
+                issues.append(
+                    {
+                        "type": "ROLLING_7D_MORTALITY_CRITICAL",
+                        "severity": "CRITICAL",
+                        "species": species,
+                        "description": f"Critical 7-day cumulative mortality: {total_loss} {species} lost ({rolling_pct:.1f}% of herd over the past week).",
+                        "metrics": {
+                            "7d_losses": total_loss,
+                            "cumulative_percentage": round(rolling_pct, 1),
+                        },
+                    }
+                )
                 max_severity = "CRITICAL"
             elif rolling_pct >= 4.0:
-                issues.append({
-                    "type": "ROLLING_7D_MORTALITY_WARNING",
-                    "severity": "WARNING",
-                    "species": species,
-                    "description": f"Elevated 7-day cumulative mortality: {total_loss} {species} lost ({rolling_pct:.1f}% of herd over the past week).",
-                    "metrics": {"7d_losses": total_loss, "cumulative_percentage": round(rolling_pct, 1)}
-                })
+                issues.append(
+                    {
+                        "type": "ROLLING_7D_MORTALITY_WARNING",
+                        "severity": "WARNING",
+                        "species": species,
+                        "description": f"Elevated 7-day cumulative mortality: {total_loss} {species} lost ({rolling_pct:.1f}% of herd over the past week).",
+                        "metrics": {
+                            "7d_losses": total_loss,
+                            "cumulative_percentage": round(rolling_pct, 1),
+                        },
+                    }
+                )
                 if max_severity != "CRITICAL":
                     max_severity = "WARNING"
 
@@ -242,13 +305,20 @@ def evaluate_deterministic_rules(
                     consecutive_streak = 1
 
             if consecutive_streak >= 2:
-                issues.append({
-                    "type": "CONSECUTIVE_MORTALITY",
-                    "severity": "WARNING" if consecutive_streak == 2 else "CRITICAL",
-                    "species": species,
-                    "description": f"Multi-day consecutive mortality pattern: Deaths recorded across {consecutive_streak} consecutive days for {species}.",
-                    "metrics": {"consecutive_days": consecutive_streak, "distinct_dates": list(date_set)}
-                })
+                issues.append(
+                    {
+                        "type": "CONSECUTIVE_MORTALITY",
+                        "severity": "WARNING"
+                        if consecutive_streak == 2
+                        else "CRITICAL",
+                        "species": species,
+                        "description": f"Multi-day consecutive mortality pattern: Deaths recorded across {consecutive_streak} consecutive days for {species}.",
+                        "metrics": {
+                            "consecutive_days": consecutive_streak,
+                            "distinct_dates": list(date_set),
+                        },
+                    }
+                )
                 if consecutive_streak >= 3:
                     max_severity = "CRITICAL"
                 elif max_severity != "CRITICAL":
@@ -256,18 +326,20 @@ def evaluate_deterministic_rules(
 
     # 4. Check Unexplained Drops
     for ud in unexplained_drops:
-        issues.append({
-            "type": "UNEXPLAINED_POPULATION_DROP",
-            "severity": "WARNING",
-            "species": ud["species"],
-            "description": f"Unexplained inventory reduction: {ud['drop_count']} {ud['species']} ({ud['percentage']}%) drop logged on {ud['date']}.",
-            "metrics": ud
-        })
+        issues.append(
+            {
+                "type": "UNEXPLAINED_POPULATION_DROP",
+                "severity": "WARNING",
+                "species": ud["species"],
+                "description": f"Unexplained inventory reduction: {ud['drop_count']} {ud['species']} ({ud['percentage']}%) drop logged on {ud['date']}.",
+                "metrics": ud,
+            }
+        )
         if max_severity != "CRITICAL":
             max_severity = "WARNING"
 
     # 5. Cross-Reference Health Logs (Symptoms & Illness Context)
-    correlated_symptoms: List[Dict[str, Any]] = []
+    correlated_symptoms: list[dict[str, Any]] = []
     for hlog in health_logs:
         h_time = hlog.get("timestamp") or ""
         try:
@@ -282,21 +354,33 @@ def evaluate_deterministic_rules(
             note_content = hlog.get("notes") or ""
 
             # Check matching species with mortality
-            for species in recent_losses_by_species.keys():
-                if species.lower() in notes or species.lower() in animal_id.lower() or species.lower() in event_type:
-                    correlated_symptoms.append({
-                        "species": species,
-                        "event_type": event_type,
-                        "notes": note_content,
-                        "date": h_dt.strftime("%Y-%m-%d")
-                    })
-                    issues.append({
-                        "type": "HEALTH_SYMPTOM_CORRELATION",
-                        "severity": "CRITICAL",
-                        "species": species,
-                        "description": f"Correlated medical symptom in health logs: '{note_content}' coinciding with recent {species} losses.",
-                        "metrics": {"symptom": note_content, "event_type": event_type, "date": h_dt.strftime("%Y-%m-%d")}
-                    })
+            for species in recent_losses_by_species:
+                if (
+                    species.lower() in notes
+                    or species.lower() in animal_id.lower()
+                    or species.lower() in event_type
+                ):
+                    correlated_symptoms.append(
+                        {
+                            "species": species,
+                            "event_type": event_type,
+                            "notes": note_content,
+                            "date": h_dt.strftime("%Y-%m-%d"),
+                        }
+                    )
+                    issues.append(
+                        {
+                            "type": "HEALTH_SYMPTOM_CORRELATION",
+                            "severity": "CRITICAL",
+                            "species": species,
+                            "description": f"Correlated medical symptom in health logs: '{note_content}' coinciding with recent {species} losses.",
+                            "metrics": {
+                                "symptom": note_content,
+                                "event_type": event_type,
+                                "date": h_dt.strftime("%Y-%m-%d"),
+                            },
+                        }
+                    )
                     max_severity = "CRITICAL"
 
     # 6. Cross-Reference Persistent Active Farm Memories (Clinical Observations)
@@ -313,21 +397,33 @@ def evaluate_deterministic_rules(
             obs_content = mem.get("observation") or ""
             cat = mem.get("category", "symptom")
 
-            for species in recent_losses_by_species.keys():
-                if species.lower() in m_sp or species.lower() in obs or m_sp in ("general", "unknown"):
-                    correlated_symptoms.append({
-                        "species": species,
-                        "category": cat,
-                        "observation": obs_content,
-                        "date": m_dt.strftime("%Y-%m-%d")
-                    })
-                    issues.append({
-                        "type": "FARM_MEMORY_SYMPTOM_CORRELATION",
-                        "severity": "CRITICAL",
-                        "species": species,
-                        "description": f"Correlated clinical memory observation: '{obs_content}' coinciding with recent {species} losses.",
-                        "metrics": {"observation": obs_content, "category": cat, "date": m_dt.strftime("%Y-%m-%d")}
-                    })
+            for species in recent_losses_by_species:
+                if (
+                    species.lower() in m_sp
+                    or species.lower() in obs
+                    or m_sp in ("general", "unknown")
+                ):
+                    correlated_symptoms.append(
+                        {
+                            "species": species,
+                            "category": cat,
+                            "observation": obs_content,
+                            "date": m_dt.strftime("%Y-%m-%d"),
+                        }
+                    )
+                    issues.append(
+                        {
+                            "type": "FARM_MEMORY_SYMPTOM_CORRELATION",
+                            "severity": "CRITICAL",
+                            "species": species,
+                            "description": f"Correlated clinical memory observation: '{obs_content}' coinciding with recent {species} losses.",
+                            "metrics": {
+                                "observation": obs_content,
+                                "category": cat,
+                                "date": m_dt.strftime("%Y-%m-%d"),
+                            },
+                        }
+                    )
                     max_severity = "CRITICAL"
 
     summary_stats = {
@@ -335,7 +431,7 @@ def evaluate_deterministic_rules(
         "recent_sales_by_species": recent_sales_by_species,
         "current_totals": current_totals,
         "correlated_symptoms_count": len(correlated_symptoms),
-        "total_issues_count": len(issues)
+        "total_issues_count": len(issues),
     }
 
     return max_severity, issues, summary_stats
@@ -345,9 +441,10 @@ def evaluate_deterministic_rules(
 # Layer 2: Classical Machine Learning Models (Isolation Forest & MAD)
 # -------------------------------------------------------------------
 
+
 def evaluate_classical_ml_anomalies(
-    events: List[Dict[str, Any]]
-) -> Tuple[bool, float, List[Dict[str, Any]]]:
+    events: list[dict[str, Any]],
+) -> tuple[bool, float, list[dict[str, Any]]]:
     """
     Applies Isolation Forest and Robust Z-Score (MAD) across historical features to detect
     multivariate statistical outliers.
@@ -387,17 +484,21 @@ def evaluate_classical_ml_anomalies(
         is_iforest_outlier = bool(predictions[idx] == -1)
         is_zscore_outlier = bool(robust_z_scores[idx] >= 3.0)
 
-        if (is_iforest_outlier or is_zscore_outlier) and X[idx, 1] == 1.0:  # Is a loss event
+        if (is_iforest_outlier or is_zscore_outlier) and X[
+            idx, 1
+        ] == 1.0:  # Is a loss event
             m = meta[idx]
-            ml_flagged.append({
-                "id": m["id"],
-                "species": m["species"],
-                "loss_count": abs(m["count_change"]),
-                "percentage_delta": round(float(X[idx, 0]) * 100, 1),
-                "isolation_forest_score": round(float(decision_scores[idx]), 3),
-                "robust_z_score": round(float(robust_z_scores[idx]), 2),
-                "date": m["created_at"][:10] if m["created_at"] else ""
-            })
+            ml_flagged.append(
+                {
+                    "id": m["id"],
+                    "species": m["species"],
+                    "loss_count": abs(m["count_change"]),
+                    "percentage_delta": round(float(X[idx, 0]) * 100, 1),
+                    "isolation_forest_score": round(float(decision_scores[idx]), 3),
+                    "robust_z_score": round(float(robust_z_scores[idx]), 2),
+                    "date": m["created_at"][:10] if m["created_at"] else "",
+                }
+            )
 
     is_anomaly = len(ml_flagged) > 0
     return is_anomaly, latest_score, ml_flagged
@@ -407,13 +508,14 @@ def evaluate_classical_ml_anomalies(
 # Layer 3: LLM Clinical Report Synthesis (Qwen 2.5 3B)
 # -------------------------------------------------------------------
 
+
 def synthesize_clinical_report(
     farm_id: str,
     severity: str,
-    issues: List[Dict[str, Any]],
-    ml_outliers: List[Dict[str, Any]],
-    summary_stats: Dict[str, Any],
-    language: str = "english"
+    issues: list[dict[str, Any]],
+    ml_outliers: list[dict[str, Any]],
+    summary_stats: dict[str, Any],
+    language: str = "english",
 ) -> str:
     """
     Synthesizes the statistical, ML, and heuristic findings into a readable, actionable clinical
@@ -426,32 +528,49 @@ def synthesize_clinical_report(
             "No mortality spikes, consecutive losses, or statistical anomalies were detected across active livestock records."
         )
 
-    from llm_engine import get_llm, _english_logit_bias, N_CTX
+    from llm_engine import N_CTX, _english_logit_bias, get_llm
     from rag_pipeline import search_knowledge_base
 
     llm = get_llm()
     farm_context = get_system_context_summary(farm_id)
 
     # Search knowledge base for veterinary guidance on affected species/symptoms
-    affected_species = list(set([i.get("species") for i in issues if i.get("species")] + [m.get("species") for m in ml_outliers if m.get("species")]))
+    affected_species = list(
+        set(
+            [i.get("species") for i in issues if i.get("species")]
+            + [m.get("species") for m in ml_outliers if m.get("species")]
+        )
+    )
     sp_query = " ".join(affected_species) if affected_species else "livestock"
-    rag_hits = search_knowledge_base(f"{sp_query} disease outbreak biosecurity treatment mortality control", top_k=2)
-    kb_context = "\n".join([f"- {h.get('text', '')[:350]}" for h in rag_hits if len(h.get('text', '')) > 40])
+    rag_hits = search_knowledge_base(
+        f"{sp_query} disease outbreak biosecurity treatment mortality control", top_k=2
+    )
+    kb_context = "\n".join(
+        [
+            f"- {h.get('text', '')[:350]}"
+            for h in rag_hits
+            if len(h.get("text", "")) > 40
+        ]
+    )
 
     # Build structured summary for prompt
-    issues_bullets = "\n".join([f"- [{i.get('severity')}] {i.get('description')}" for i in issues])
+    issues_bullets = "\n".join(
+        [f"- [{i.get('severity')}] {i.get('description')}" for i in issues]
+    )
     if ml_outliers:
-        ml_bullets = "\n".join([
-            f"- Machine Learning Outlier ({m['species']}): {m['loss_count']} loss ({m['percentage_delta']}%) | Isolation Forest Score: {m['isolation_forest_score']}"
-            for m in ml_outliers
-        ])
+        ml_bullets = "\n".join(
+            [
+                f"- Machine Learning Outlier ({m['species']}): {m['loss_count']} loss ({m['percentage_delta']}%) | Isolation Forest Score: {m['isolation_forest_score']}"
+                for m in ml_outliers
+            ]
+        )
     else:
         ml_bullets = "- No standalone ML statistical outliers."
 
     system_prompt = (
         "You are FarmHand AI, an expert veterinary epidemiologist and livestock advisor.\n"
         "Write your advisory report in clear, formal, standard international English.\n"
-        "Do NOT use Nigerian Pidgin or slang. Do NOT use emojis.\n"
+        "Do NOT use slang or colloquial dialect particles. Do NOT use emojis.\n"
         "Strictly adhere to biological species boundaries (e.g. goats: PPR, CCPP, Enterotoxemia, Anthrax; poultry: Newcastle, Coccidiosis, Gumboro; cattle: CBPP, FMD). Never cross-attribute avian diseases to ruminants.\n"
         "Format the clinical report using clean Markdown with these exact four section headers and structured bullet points with bold labels:\n\n"
         "### 1. Situation Overview\n"
@@ -495,7 +614,7 @@ def synthesize_clinical_report(
             temperature=0.1,
             repeat_penalty=1.15,
             logit_bias=_english_logit_bias,
-            stop=["<|im_end|>", "<|im_start|>"]
+            stop=["<|im_end|>", "<|im_start|>"],
         )
         body = response["choices"][0]["text"].strip()
         report = "### 1. Situation Overview\n" + body
@@ -514,12 +633,13 @@ def synthesize_clinical_report(
 # Main Hybrid Execution Entrypoint
 # -------------------------------------------------------------------
 
+
 def run_flock_anomaly_detection(
     farm_id: str = "default_farm",
     trigger_source: str = "ledger_update",
     language: str = "english",
-    db_path: Path = DB_PATH
-) -> Dict[str, Any]:
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
     """
     Main entry point: Runs Layer 1 (Deterministic), Layer 2 (Isolation Forest / MAD ML),
     Layer 3 (LLM Synthesis), and persists the resulting report into `ledger_anomalies`.
@@ -535,7 +655,7 @@ def run_flock_anomaly_detection(
         events=events,
         health_logs=health_logs,
         current_totals=current_totals,
-        farm_memories=farm_memories
+        farm_memories=farm_memories,
     )
 
     # 2. Evaluate Layer 2 Classical ML Models
@@ -559,7 +679,7 @@ def run_flock_anomaly_detection(
         issues=det_issues,
         ml_outliers=ml_outliers,
         summary_stats=summary_stats,
-        language=language
+        language=language,
     )
 
     # 5. Persist to Database
@@ -571,7 +691,7 @@ def run_flock_anomaly_detection(
         "ml_outliers": ml_outliers,
         "ml_decision_score": round(ml_score, 3),
         "summary_stats": summary_stats,
-        "analysis_time_seconds": round(time.time() - t_start, 3)
+        "analysis_time_seconds": round(time.time() - t_start, 3),
     }
 
     record = save_ledger_anomaly(
@@ -580,8 +700,10 @@ def run_flock_anomaly_detection(
         title=title,
         metrics=metrics_payload,
         report_text=report_text,
-        db_path=db_path
+        db_path=db_path,
     )
 
-    print(f"[anomaly_detector] Farm '{farm_id}' evaluated: {overall_severity} ({len(det_issues)} rules, ML={ml_anomaly}) in {time.time() - t_start:.2f}s")
+    print(
+        f"[anomaly_detector] Farm '{farm_id}' evaluated: {overall_severity} ({len(det_issues)} rules, ML={ml_anomaly}) in {time.time() - t_start:.2f}s"
+    )
     return record

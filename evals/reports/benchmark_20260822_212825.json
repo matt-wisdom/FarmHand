@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-08-22T21:28:25.479371",
+  "total_count": 1,
+  "passed_count": 0,
+  "failed_count": 1,
+  "pass_rate_pct": 0.0,
+  "avg_semantic_score": 0.92,
+  "avg_latency_sec": 343.9,
+  "total_duration_sec": 344.3,
+  "category_stats": {
+    "veterinary_diagnosis": {
+      "total": 1,
+      "passed": 0
+    }
+  },
+  "results": [
+    {
+      "id": "eval_vet_01_goat_tetanus_definition_en",
+      "category": "veterinary_diagnosis",
+      "language": "english",
+      "description": "Direct overview, pathogen, transmission, and symptoms of tetanus in goats without surgical confusion.",
+      "passed": false,
+      "semantic_score": 0.923,
+      "latency_sec": 343.9,
+      "failure_reasons": [
+        "Missing required keyword/concept: 'tetanus'"
+      ],
+      "response": "Tetracoccus is a severe bacterial infection that spreads through wounds, especially in poorly sanitized environments. It causes stiffness and lockjaw in goats, often fatal within 48 hours of injury. Prevention involves wound cleaning with iodine or formaldehyde before vaccination every 6 weeks during rainy season."
+    }
+  ]
+}

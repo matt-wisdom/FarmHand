@@ -1,27 +1,30 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, status
+from typing import Any
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import anomaly_detector
+import farm_memory
+import rag_pipeline
 from database import (
     DB_PATH,
-    add_animal_record,
     add_chat_message,
     create_chat_thread,
     create_farm,
     delete_chat_thread,
     delete_farm,
-    get_all_animals,
+    delete_farm_memory,
+    get_active_farm_memories,
     get_all_expenditures,
-    record_expenditure,
+    get_all_farm_memories,
     get_all_health_logs,
-    record_health_log,
-    get_telemetry_data,
     get_chat_threads,
     get_current_flock_totals,
     get_farm_by_id,
@@ -30,28 +33,32 @@ from database import (
     get_flock_ledger_history,
     get_latest_ledger_anomaly,
     get_ledger_anomaly_history,
-    get_active_farm_memories,
-    get_all_farm_memories,
-    resolve_farm_memory,
-    delete_farm_memory,
-    get_thread_by_id,
+    get_telemetry_data,
     get_thread_messages,
-    truncate_thread_messages_from,
-    truncate_thread_messages_by_index,
     init_db,
+    record_expenditure,
     record_flock_event,
+    resolve_farm_memory,
+    truncate_thread_messages_by_index,
+    truncate_thread_messages_from,
     update_farm,
 )
 from llm_engine import chat_completion, get_llm
-import rag_pipeline
-import anomaly_detector
-import farm_memory
+from rag_pipeline import (
+    UPLOADS_DIR,
+    add_document_to_knowledge_base,
+    delete_farm_document,
+    get_global_documents,
+    list_farm_documents,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("FarmHandBackend")
 
 
@@ -67,6 +74,7 @@ logging.getLogger("uvicorn.access").addFilter(HealthLogFilter())
 # FastAPI Lifespan Context Manager
 # -------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -74,7 +82,9 @@ async def lifespan(app: FastAPI):
     Performs startup initializations (database tables, warm-up FastEmbed & FAISS)
     and clean shutdown releases.
     """
-    logger.info("Initializing SQLite database tables (including multi-farm profiles & threads)...")
+    logger.info(
+        "Initializing SQLite database tables (including multi-farm profiles & threads)..."
+    )
     init_db()
 
     logger.info("Warming up FastEmbed ONNX embedding session...")
@@ -96,7 +106,9 @@ async def lifespan(app: FastAPI):
     if llm is not None:
         logger.info("llama.cpp LLM engine loaded successfully.")
     else:
-        logger.warning("llama.cpp model file not found in backend/models/. Edge backend will use fallback router.")
+        logger.warning(
+            "llama.cpp model file not found in backend/models/. Edge backend will use fallback router."
+        )
 
     logger.info("FarmHand edge backend startup complete.")
     yield
@@ -111,7 +123,7 @@ app = FastAPI(
     title="FarmHand AI Edge System API",
     description="Edge offline farm AI management system supporting multi-farm context isolation and ChatML tool calls.",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Enable CORS for browser local access
@@ -132,71 +144,106 @@ if STATIC_DIR.exists():
 # Pydantic Schemas
 # -------------------------------------------------------------------
 
+
 class FarmCreateRequest(BaseModel):
     name: str = Field(..., description="Farm name (e.g. Green Valley Poultry Pen)")
-    farm_type: str = Field("General", description="Species/Type constraint ('Goat', 'Poultry', 'Cattle', 'Crops', 'Fish', 'General')")
-    description: Optional[str] = Field("", description="Custom farm details and description")
+    farm_type: str = Field(
+        "Poultry",
+        description="Species/Type constraint ('Poultry', 'Goat', 'Cattle', 'Pig', 'Fish')",
+    )
+    description: str | None = Field(
+        "", description="Custom farm details and description"
+    )
 
 
 class FarmUpdateRequest(BaseModel):
     name: str
     farm_type: str
-    description: Optional[str] = ""
+    description: str | None = ""
 
 
 class CreateThreadRequest(BaseModel):
-    title: Optional[str] = Field("New Chat", description="Thread title")
-    farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
+    title: str | None = Field("New Chat", description="Thread title")
+    farm_id: str | None = Field("default_farm", description="Active farm ID")
 
 
 class ChatRequest(BaseModel):
     thread_id: str = Field(..., description="UUID of active chat thread")
     user_input: str = Field(..., description="User text prompt")
-    farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
-    language: Optional[str] = Field("english", description="Language: english, hausa, pidgin")
-    edit_message_id: Optional[int] = Field(None, description="Optional ID of message being edited to truncate history from")
-    edit_message_index: Optional[int] = Field(None, description="Optional 0-based index of message being edited to truncate history from")
+    farm_id: str | None = Field("default_farm", description="Active farm ID")
+    language: str | None = Field(
+        "english", description="Language: english, hausa, pidgin"
+    )
+    edit_message_id: int | None = Field(
+        None, description="Optional ID of message being edited to truncate history from"
+    )
+    edit_message_index: int | None = Field(
+        None,
+        description="Optional 0-based index of message being edited to truncate history from",
+    )
 
 
 class EditMessageRequest(BaseModel):
     thread_id: str = Field(..., description="UUID of active chat thread")
     message_index: int = Field(..., description="0-indexed position of message to edit")
     new_content: str = Field(..., description="Updated text prompt")
-    farm_id: Optional[str] = Field("default_farm", description="Active farm ID")
-    language: Optional[str] = Field("english", description="Language: english, hausa, pidgin")
+    farm_id: str | None = Field("default_farm", description="Active farm ID")
+    language: str | None = Field(
+        "english", description="Language: english, hausa, pidgin"
+    )
 
 
 class ChatResponse(BaseModel):
     status: str = "success"
     thread_id: str = Field(..., description="UUID of the chat thread")
     response: str = Field(..., description="Assistant final response string")
-    user_message_id: Optional[int] = Field(None, description="ID of newly inserted user message")
-    assistant_message_id: Optional[int] = Field(None, description="ID of newly inserted assistant message")
+    user_message_id: int | None = Field(
+        None, description="ID of newly inserted user message"
+    )
+    assistant_message_id: int | None = Field(
+        None, description="ID of newly inserted assistant message"
+    )
 
 
 class FlockEventRequest(BaseModel):
     species: str = Field("Poultry", description="Species name")
-    count_change: Optional[int] = Field(0, description="Change in count (positive for additions, negative for losses)")
-    exact_total: Optional[int] = Field(None, description="Direct new total count (for initial setup or reset)")
-    event_type: str = Field("count_update", description="Event type: initial_count, purchase, mortality, sale, count_update")
-    notes: Optional[str] = Field("", description="Optional event description or notes")
+    count_change: int | None = Field(
+        0, description="Change in count (positive for additions, negative for losses)"
+    )
+    exact_total: int | None = Field(
+        None, description="Direct new total count (for initial setup or reset)"
+    )
+    event_type: str = Field(
+        "count_update",
+        description="Event type: initial_count, purchase, mortality, sale, count_update",
+    )
+    notes: str | None = Field("", description="Optional event description or notes")
 
 
 class FarmMemoryRequest(BaseModel):
     species: str = Field("General", description="Species observed")
-    category: str = Field("symptom", description="Category: symptom, behavior, treatment, feeding, general")
-    observation: str = Field(..., description="Clinical or behavioral observation description")
+    category: str = Field(
+        "symptom",
+        description="Category: symptom, behavior, treatment, feeding, general",
+    )
+    observation: str = Field(
+        ..., description="Clinical or behavioral observation description"
+    )
 
 
 class ExpenditureRequest(BaseModel):
-    category: str = Field("feed", description="Category of expenditure (e.g. feed, veterinary, equipment, operations)")
+    category: str = Field(
+        "feed",
+        description="Category of expenditure (e.g. feed, veterinary, equipment, operations)",
+    )
     amount: float = Field(..., gt=0, description="Amount spent in NGN")
-    description: Optional[str] = Field("", description="Description of the expenditure")
+    description: str | None = Field("", description="Description of the expenditure")
 
 
 # -------------------------------------------------------------------
 # Multi-Farm Management Endpoints
 # -------------------------------------------------------------------
+
 
 @app.get("/farms", tags=["Multi-Farm Management"])
 def list_farms_endpoint():
@@ -208,7 +255,11 @@ def list_farms_endpoint():
 @app.post("/farms", tags=["Multi-Farm Management"])
 def create_farm_endpoint(payload: FarmCreateRequest):
     """POST /farms: Create a new farm profile."""
-    farm = create_farm(name=payload.name, farm_type=payload.farm_type, description=payload.description or "")
+    farm = create_farm(
+        name=payload.name,
+        farm_type=payload.farm_type,
+        description=payload.description or "",
+    )
     return {"status": "success", "farm": farm}
 
 
@@ -224,7 +275,12 @@ def get_farm_endpoint(farm_id: str):
 @app.put("/farms/{farm_id}", tags=["Multi-Farm Management"])
 def update_farm_endpoint(farm_id: str, payload: FarmUpdateRequest):
     """PUT /farms/{farm_id}: Update an existing farm profile."""
-    updated = update_farm(farm_id, name=payload.name, farm_type=payload.farm_type, description=payload.description or "")
+    updated = update_farm(
+        farm_id,
+        name=payload.name,
+        farm_type=payload.farm_type,
+        description=payload.description or "",
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Farm profile not found")
     return {"status": "success", "farm": updated}
@@ -234,7 +290,9 @@ def update_farm_endpoint(farm_id: str, payload: FarmUpdateRequest):
 def delete_farm_endpoint(farm_id: str):
     """DELETE /farms/{farm_id}: Delete a farm profile."""
     if farm_id == "default_farm":
-        raise HTTPException(status_code=400, detail="Cannot delete default farm profile")
+        raise HTTPException(
+            status_code=400, detail="Cannot delete default farm profile"
+        )
     success = delete_farm(farm_id)
     if not success:
         raise HTTPException(status_code=404, detail="Farm profile not found")
@@ -244,6 +302,7 @@ def delete_farm_endpoint(farm_id: str):
 # -------------------------------------------------------------------
 # Flock & Herd Count Ledger Endpoints
 # -------------------------------------------------------------------
+
 
 @app.get("/api/farms/{farm_id}/flock-ledger", tags=["Flock Ledger"])
 def get_flock_ledger_endpoint(farm_id: str):
@@ -255,7 +314,7 @@ def get_flock_ledger_endpoint(farm_id: str):
         "farm_id": farm_id,
         "current_totals": totals,
         "total_flock_size": sum(totals.values()),
-        "history": history
+        "history": history,
     }
 
 
@@ -268,15 +327,17 @@ def record_flock_event_endpoint(farm_id: str, payload: FlockEventRequest):
         count_change=payload.count_change or 0,
         exact_total=payload.exact_total,
         event_type=payload.event_type,
-        notes=payload.notes or ""
+        notes=payload.notes or "",
     )
     # Automatically trigger anomaly detection upon ledger update
-    anomaly_eval = anomaly_detector.run_flock_anomaly_detection(farm_id=farm_id, trigger_source="api_ledger_post")
+    anomaly_eval = anomaly_detector.run_flock_anomaly_detection(
+        farm_id=farm_id, trigger_source="api_ledger_post"
+    )
     return {
         "status": "success",
         "farm_id": farm_id,
         "entry": entry,
-        "anomaly_evaluation": anomaly_eval
+        "anomaly_evaluation": anomaly_eval,
     }
 
 
@@ -289,38 +350,37 @@ def get_flock_anomalies_endpoint(farm_id: str):
         "status": "success",
         "farm_id": farm_id,
         "latest": latest,
-        "history": history
+        "history": history,
     }
 
 
 @app.post("/api/farms/{farm_id}/flock-ledger/anomalies/run", tags=["Flock Ledger"])
 def trigger_flock_anomalies_endpoint(farm_id: str):
     """POST /api/farms/{farm_id}/flock-ledger/anomalies/run: Manually triggers anomaly analysis."""
-    record = anomaly_detector.run_flock_anomaly_detection(farm_id=farm_id, trigger_source="manual_ui_trigger")
-    return {
-        "status": "success",
-        "farm_id": farm_id,
-        "anomaly_report": record
-    }
+    record = anomaly_detector.run_flock_anomaly_detection(
+        farm_id=farm_id, trigger_source="manual_ui_trigger"
+    )
+    return {"status": "success", "farm_id": farm_id, "anomaly_report": record}
 
 
 @app.get("/api/farms/{farm_id}/flock-ledger/count", tags=["Flock Ledger"])
-def get_flock_count_endpoint(farm_id: str, species: Optional[str] = None, target_date: Optional[str] = None):
+def get_flock_count_endpoint(
+    farm_id: str, species: str | None = None, target_date: str | None = None
+):
     """GET /api/farms/{farm_id}/flock-ledger/count: Queries count on a specific historical date (YYYY-MM-DD)."""
-    result = get_flock_count_on_date(farm_id=farm_id, species=species, target_date=target_date)
-    return {
-        "status": "success",
-        "farm_id": farm_id,
-        "data": result
-    }
+    result = get_flock_count_on_date(
+        farm_id=farm_id, species=species, target_date=target_date
+    )
+    return {"status": "success", "farm_id": farm_id, "data": result}
 
 
 # -------------------------------------------------------------------
 # Persistent Farm Memory & Clinical Observation Endpoints
 # -------------------------------------------------------------------
 
+
 @app.get("/api/farms/{farm_id}/memories", tags=["Farm Memory"])
-def get_farm_memories_endpoint(farm_id: str, status: Optional[str] = None):
+def get_farm_memories_endpoint(farm_id: str, status: str | None = None):
     """GET /api/farms/{farm_id}/memories: Retrieve all persistent memories for the active farm."""
     if status == "active":
         memories = get_active_farm_memories(farm_id=farm_id, limit=50)
@@ -330,7 +390,7 @@ def get_farm_memories_endpoint(farm_id: str, status: Optional[str] = None):
         "status": "success",
         "farm_id": farm_id,
         "count": len(memories),
-        "memories": memories
+        "memories": memories,
     }
 
 
@@ -342,13 +402,9 @@ def create_farm_memory_endpoint(farm_id: str, payload: FarmMemoryRequest):
         species=payload.species,
         category=payload.category,
         observation=payload.observation,
-        source="manual_ui"
+        source="manual_ui",
     )
-    return {
-        "status": "success",
-        "farm_id": farm_id,
-        "memory": mem
-    }
+    return {"status": "success", "farm_id": farm_id, "memory": mem}
 
 
 @app.put("/api/farms/{farm_id}/memories/{memory_id}/resolve", tags=["Farm Memory"])
@@ -356,7 +412,9 @@ def resolve_farm_memory_endpoint(farm_id: str, memory_id: int):
     """PUT /api/farms/{farm_id}/memories/{memory_id}/resolve: Mark observation as resolved."""
     ok = resolve_farm_memory(memory_id=memory_id, farm_id=farm_id)
     if not ok:
-        raise HTTPException(status_code=404, detail="Memory record not found or already resolved")
+        raise HTTPException(
+            status_code=404, detail="Memory record not found or already resolved"
+        )
     return {"status": "success", "message": f"Memory {memory_id} marked as resolved"}
 
 
@@ -373,6 +431,7 @@ def delete_farm_memory_endpoint(farm_id: str, memory_id: int):
 # Operational Data Endpoints (Expenditures, Health Logs, Telemetry)
 # -------------------------------------------------------------------
 
+
 @app.get("/api/farms/{farm_id}/expenditures", tags=["Expenditures"])
 def get_farm_expenditures_endpoint(farm_id: str):
     """GET /api/farms/{farm_id}/expenditures: Returns recorded expenditures for the farm."""
@@ -383,7 +442,7 @@ def get_farm_expenditures_endpoint(farm_id: str):
         "farm_id": farm_id,
         "count": len(records),
         "total_amount": total_amount,
-        "expenditures": records
+        "expenditures": records,
     }
 
 
@@ -394,13 +453,9 @@ def create_farm_expenditure_endpoint(farm_id: str, payload: ExpenditureRequest):
         farm_id=farm_id,
         category=payload.category,
         amount=payload.amount,
-        description=payload.description or ""
+        description=payload.description or "",
     )
-    return {
-        "status": "success",
-        "farm_id": farm_id,
-        "expenditure": rec
-    }
+    return {"status": "success", "farm_id": farm_id, "expenditure": rec}
 
 
 @app.get("/api/farms/{farm_id}/health-logs", tags=["Health Records"])
@@ -411,7 +466,7 @@ def get_farm_health_logs_endpoint(farm_id: str):
         "status": "success",
         "farm_id": farm_id,
         "count": len(logs),
-        "health_logs": logs
+        "health_logs": logs,
     }
 
 
@@ -423,7 +478,7 @@ def get_farm_telemetry_endpoint(farm_id: str):
         "status": "success",
         "farm_id": farm_id,
         "count": len(data),
-        "telemetry": data
+        "telemetry": data,
     }
 
 
@@ -431,53 +486,44 @@ def get_farm_telemetry_endpoint(farm_id: str):
 # Knowledge Base Upload Endpoints
 # -------------------------------------------------------------------
 
-from rag_pipeline import (
-    add_document_to_knowledge_base,
-    list_farm_documents,
-    get_global_documents,
-    delete_farm_document,
-    UPLOADS_DIR
-)
-from fastapi import UploadFile, File
-
 
 @app.post("/api/farms/{farm_id}/knowledge/upload", tags=["Knowledge Base"])
 async def upload_knowledge_document(
     farm_id: str,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),  # noqa: B008
 ):
     """POST /api/farms/{farm_id}/knowledge/upload: Upload a PDF to farm's knowledge base."""
-    if not file.filename.lower().endswith('.pdf'):
+    if not file.filename.lower().endswith(".pdf"):
         return {"success": False, "error": "Only PDF files are supported"}
-    
+
     # Create farm's upload directory
     farm_upload_dir = UPLOADS_DIR / farm_id
     farm_upload_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save uploaded file
     file_path = farm_upload_dir / file.filename
-    
+
     try:
         content = await file.read()
         with open(file_path, "wb") as f:
             f.write(content)
-        
+
         # Add to knowledge base
         result = add_document_to_knowledge_base(farm_id, file_path)
-        
+
         if result.get("success"):
             return {
                 "success": True,
                 "filename": file.filename,
                 "chunks_added": result.get("chunks_added", 0),
-                "message": f"Successfully added {result.get('chunks_added', 0)} chunks to knowledge base"
+                "message": f"Successfully added {result.get('chunks_added', 0)} chunks to knowledge base",
             }
         else:
             # Clean up file on failure
             if file_path.exists():
                 file_path.unlink()
             return {"success": False, "error": result.get("error", "Unknown error")}
-            
+
     except Exception as e:
         # Clean up file on exception
         if file_path.exists():
@@ -490,39 +536,175 @@ def list_farm_knowledge_documents(farm_id: str):
     """GET /api/farms/{farm_id}/knowledge/documents: List farm's uploaded documents."""
     farm_docs = list_farm_documents(farm_id)
     global_docs = get_global_documents()
-    
+
     return {
         "status": "success",
         "farm_id": farm_id,
         "farm_documents": farm_docs,
         "global_documents": global_docs,
         "total_farm_documents": len(farm_docs),
-        "total_global_documents": len(global_docs)
+        "total_global_documents": len(global_docs),
     }
 
 
-@app.delete("/api/farms/{farm_id}/knowledge/documents/{filename}", tags=["Knowledge Base"])
+@app.delete(
+    "/api/farms/{farm_id}/knowledge/documents/{filename}", tags=["Knowledge Base"]
+)
 def delete_farm_knowledge_document(farm_id: str, filename: str):
     """DELETE /api/farms/{farm_id}/knowledge/documents/{filename}: Delete a farm's uploaded document."""
     # Also delete the file from disk
     file_path = UPLOADS_DIR / farm_id / filename
-    
+
     result = delete_farm_document(farm_id, filename)
-    
+
     if result.get("success") and file_path.exists():
         file_path.unlink()
-    
+
     return result
 
 
 # -------------------------------------------------------------------
-def normalize_language(lang: Optional[str]) -> str:
+# Feed Formulation Optimization Endpoints
+# -------------------------------------------------------------------
+
+
+class FeedOptimizationRequest(BaseModel):
+    target_profile: str = Field(
+        "broiler_starter", description="Target feed profile key"
+    )
+    batch_size_kg: float = Field(100.0, description="Total batch weight in kg")
+    ingredient_prices: dict[str, float] | None = Field(
+        None, description="Custom ingredient prices in NGN/kg"
+    )
+    excluded_ingredients: list[str] | None = Field(
+        None, description="Excluded ingredient keys"
+    )
+
+
+class SaveFormulationRequest(BaseModel):
+    name: str = Field("Custom Feed Formula", description="User recipe label")
+    target_profile: str = Field("broiler_starter", description="Target profile key")
+    batch_size_kg: float = Field(100.0, description="Batch weight in kg")
+    cost_per_kg: float = Field(0.0, description="Computed cost per kg")
+    cost_50kg_bag: float = Field(0.0, description="Computed cost per 50kg bag")
+    total_cost: float = Field(0.0, description="Computed batch cost")
+    recipe: list[dict[str, Any]] = Field([], description="Ingredients breakdown list")
+    nutrients: dict[str, Any] = Field({}, description="Achieved nutrients breakdown")
+    notes: str | None = Field("", description="Optional farm mixing notes")
+
+
+@app.get("/api/feed/targets", tags=["Feed Optimizer"])
+def get_feed_targets():
+    """GET /api/feed/targets: List all livestock feed profiles and available tropical ingredients."""
+    from feed_optimizer import INGREDIENT_DATABASE, NUTRITIONAL_TARGETS
+
+    return {
+        "status": "success",
+        "targets": [
+            {
+                "key": k,
+                "display_name": v["display_name"],
+                "species": v["species"],
+                "target_cp": v["target_cp"],
+                "min_me": v["min_me"],
+                "min_ca": v["min_ca"],
+                "min_p": v["min_p"],
+                "max_cf": v["max_cf"],
+                "commercial_benchmark_25kg": v.get(
+                    "commercial_benchmark_25kg", 22000.0
+                ),
+                "notes": v.get("notes", ""),
+            }
+            for k, v in NUTRITIONAL_TARGETS.items()
+        ],
+        "ingredients": [
+            {
+                "key": k,
+                "name": v["name"],
+                "category": v["category"],
+                "cp": v["cp"],
+                "me": v["me"],
+                "ca": v["ca"],
+                "p": v["p"],
+                "cf": v["cf"],
+                "default_price": v["default_price"],
+                "min_inclusion": v["min_inclusion"],
+                "max_inclusion": v["max_inclusion"],
+            }
+            for k, v in INGREDIENT_DATABASE.items()
+        ],
+    }
+
+
+@app.post("/api/feed/optimize", tags=["Feed Optimizer"])
+def api_optimize_feed(payload: FeedOptimizationRequest):
+    """POST /api/feed/optimize: Compute balanced feed formulation using linear programming."""
+    from feed_optimizer import optimize_feed_formulation
+
+    res = optimize_feed_formulation(
+        target_profile_key=payload.target_profile,
+        custom_prices=payload.ingredient_prices,
+        batch_size_kg=payload.batch_size_kg,
+        excluded_ingredients=payload.excluded_ingredients,
+    )
+    return res
+
+
+@app.get("/api/farms/{farm_id}/feed/saved", tags=["Feed Optimizer"])
+def api_get_saved_formulations(farm_id: str):
+    """GET /api/farms/{farm_id}/feed/saved: Retrieve saved feed recipes for a farm."""
+    from database import get_saved_feed_formulations
+
+    formulations = get_saved_feed_formulations(farm_id)
+    return {
+        "status": "success",
+        "farm_id": farm_id,
+        "formulations": formulations,
+        "count": len(formulations),
+    }
+
+
+@app.post("/api/farms/{farm_id}/feed/saved", tags=["Feed Optimizer"])
+def api_save_formulation(farm_id: str, payload: SaveFormulationRequest):
+    """POST /api/farms/{farm_id}/feed/saved: Save a computed feed recipe."""
+    from database import save_feed_formulation
+
+    res = save_feed_formulation(
+        farm_id=farm_id,
+        name=payload.name,
+        target_profile=payload.target_profile,
+        batch_size_kg=payload.batch_size_kg,
+        cost_per_kg=payload.cost_per_kg,
+        cost_50kg_bag=payload.cost_50kg_bag,
+        total_cost=payload.total_cost,
+        recipe_json=json.dumps(payload.recipe),
+        nutrients_json=json.dumps(payload.nutrients),
+        notes=payload.notes or "",
+    )
+    return {"status": "success", "data": res}
+
+
+@app.delete("/api/farms/{farm_id}/feed/saved/{formulation_id}", tags=["Feed Optimizer"])
+def api_delete_saved_formulation(farm_id: str, formulation_id: int):
+    """DELETE /api/farms/{farm_id}/feed/saved/{formulation_id}: Delete a saved feed recipe."""
+    from database import delete_saved_feed_formulation
+
+    deleted = delete_saved_feed_formulation(formulation_id, farm_id)
+    return {"status": "success" if deleted else "not_found", "deleted": deleted}
+
+
+# -------------------------------------------------------------------
+def normalize_language(lang: str | None) -> str:
     if not lang:
         return "english"
-    l = str(lang).strip().lower()
-    if l in ["ha", "hausa"] or l.startswith("ha-") or "hausa" in l:
+    cleaned = str(lang).strip().lower()
+    if cleaned in ["ha", "hausa"] or cleaned.startswith("ha-") or "hausa" in cleaned:
         return "hausa"
-    if l in ["pg", "pidgin", "pcm"] or l.startswith("pid") or "pidgin" in l:
+    if (
+        cleaned in ["pg", "pidgin", "pcm"]
+        or cleaned.startswith("pid")
+        or "pidgin" in cleaned
+    ):
         return "pidgin"
     return "english"
 
@@ -537,8 +719,8 @@ def read_root():
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
-            }
+                "Expires": "0",
+            },
         )
     return {"message": "FarmHand AI Edge API running."}
 
@@ -558,6 +740,7 @@ def health_check():
 
     try:
         import psutil
+
         process = psutil.Process()
         process_ram_mb = round(process.memory_info().rss / (1024 * 1024), 2)
         vm = psutil.virtual_memory()
@@ -579,12 +762,12 @@ def health_check():
         "system_ram_used_mb": sys_ram_used_mb,
         "system_ram_percent": sys_ram_percent,
         "total_farms": len(farms),
-        "total_threads": len(threads)
+        "total_threads": len(threads),
     }
 
 
 @app.post("/threads", tags=["Session Management"])
-def create_thread_endpoint(payload: Optional[CreateThreadRequest] = None):
+def create_thread_endpoint(payload: CreateThreadRequest | None = None):
     """POST /threads: Initializes and returns a new empty chat thread/session UUID for a farm."""
     title = payload.title if payload and payload.title else "New Chat"
     farm_id = payload.farm_id if payload and payload.farm_id else "default_farm"
@@ -593,7 +776,7 @@ def create_thread_endpoint(payload: Optional[CreateThreadRequest] = None):
         "status": "success",
         "thread_id": thread_id,
         "farm_id": farm_id,
-        "title": title
+        "title": title,
     }
 
 
@@ -605,7 +788,7 @@ def get_threads_endpoint(farm_id: str = "default_farm"):
         "status": "success",
         "farm_id": farm_id,
         "count": len(threads),
-        "threads": threads
+        "threads": threads,
     }
 
 
@@ -617,7 +800,7 @@ def get_thread_history_endpoint(thread_id: str):
         "status": "success",
         "thread_id": thread_id,
         "count": len(messages),
-        "messages": messages
+        "messages": messages,
     }
 
 
@@ -625,40 +808,52 @@ def get_thread_history_endpoint(thread_id: str):
 def delete_thread_endpoint(thread_id: str):
     """DELETE /threads/{thread_id}: Deletes a thread and all associated messages."""
     delete_chat_thread(thread_id)
-    return {
-        "status": "success",
-        "message": f"Thread '{thread_id}' deleted."
-    }
+    return {"status": "success", "message": f"Thread '{thread_id}' deleted."}
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["AI Chat"])
 def chat_endpoint(payload: ChatRequest):
     """POST /chat: Process user input for an active thread within the active farm context."""
     import time
+
     req_start = time.time()
     thread_id = payload.thread_id
     user_input = payload.user_input.strip()
     farm_id = payload.farm_id or "default_farm"
     language = normalize_language(payload.language)
 
-    logger.info(f"[API /chat] Incoming Request | thread_id='{thread_id}' | farm_id='{farm_id}' | language='{language}' | prompt='{user_input}' | edit_id={payload.edit_message_id} | edit_idx={payload.edit_message_index}")
+    logger.info(
+        f"[API /chat] Incoming Request | thread_id='{thread_id}' | farm_id='{farm_id}' | language='{language}' | prompt='{user_input}' | edit_id={payload.edit_message_id} | edit_idx={payload.edit_message_index}"
+    )
 
     if not user_input:
-        logger.warning(f"[API /chat] Empty user_input received for thread '{thread_id}'")
+        logger.warning(
+            f"[API /chat] Empty user_input received for thread '{thread_id}'"
+        )
         raise HTTPException(status_code=400, detail="user_input cannot be empty.")
 
     # 0. Truncate history if editing a prior message
     if payload.edit_message_id is not None:
         truncated = truncate_thread_messages_from(thread_id, payload.edit_message_id)
-        logger.info(f"[API /chat] Truncated {truncated} messages starting from message id {payload.edit_message_id}")
+        logger.info(
+            f"[API /chat] Truncated {truncated} messages starting from message id {payload.edit_message_id}"
+        )
     elif payload.edit_message_index is not None:
-        truncated = truncate_thread_messages_by_index(thread_id, payload.edit_message_index)
-        logger.info(f"[API /chat] Truncated {truncated} messages starting from index {payload.edit_message_index}")
+        truncated = truncate_thread_messages_by_index(
+            thread_id, payload.edit_message_index
+        )
+        logger.info(
+            f"[API /chat] Truncated {truncated} messages starting from index {payload.edit_message_index}"
+        )
 
     # 1. Fetch thread history from DB (clean and truncated)
     history_rows = get_thread_messages(thread_id)
-    messages: List[Dict[str, str]] = [{"role": r["role"], "content": r["content"]} for r in history_rows]
-    logger.info(f"[API /chat] Loaded {len(messages)} prior messages from database for thread '{thread_id}'")
+    messages: list[dict[str, str]] = [
+        {"role": r["role"], "content": r["content"]} for r in history_rows
+    ]
+    logger.info(
+        f"[API /chat] Loaded {len(messages)} prior messages from database for thread '{thread_id}'"
+    )
 
     # 2. Append new user prompt
     messages.append({"role": "user", "content": user_input})
@@ -666,22 +861,29 @@ def chat_endpoint(payload: ChatRequest):
 
     # 3. Process LLM completion with farm_id context
     try:
-        assistant_response = chat_completion(messages, farm_id=farm_id, thread_id=thread_id, language=language)
+        assistant_response = chat_completion(
+            messages, farm_id=farm_id, thread_id=thread_id, language=language
+        )
     except Exception as e:
-        logger.error(f"[API /chat] Exception in chat_completion for thread '{thread_id}': {e}", exc_info=True)
-        assistant_response = f"Internal system error: {str(e)}"
+        logger.error(
+            f"[API /chat] Exception in chat_completion for thread '{thread_id}': {e}",
+            exc_info=True,
+        )
+        assistant_response = f"Internal system error: {e!s}"
 
     # 4. Save assistant response to DB
     asst_msg_id = add_chat_message(thread_id, "assistant", assistant_response)
     total_req_time = time.time() - req_start
-    logger.info(f"[API /chat] Completed successfully in {total_req_time:.2f}s | Response length: {len(assistant_response)} chars")
+    logger.info(
+        f"[API /chat] Completed successfully in {total_req_time:.2f}s | Response length: {len(assistant_response)} chars"
+    )
 
     return ChatResponse(
         status="success",
         thread_id=thread_id,
         response=assistant_response,
         user_message_id=user_msg_id,
-        assistant_message_id=asst_msg_id
+        assistant_message_id=asst_msg_id,
     )
 
 
@@ -693,7 +895,7 @@ def edit_chat_message_endpoint(payload: EditMessageRequest):
         user_input=payload.new_content,
         farm_id=payload.farm_id,
         language=payload.language or "english",
-        edit_message_index=payload.message_index
+        edit_message_index=payload.message_index,
     )
     return chat_endpoint(chat_req)
 
@@ -706,4 +908,5 @@ def thread_chat_alias(payload: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

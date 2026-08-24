@@ -32,6 +32,7 @@ Create a new eval function in `examples.py`:
 from evals.run_evals import register_eval, EvalResult
 import time
 
+
 @register_eval("my_new_eval")
 def eval_my_new_test() -> EvalResult:
     start = time.time()
@@ -44,7 +45,7 @@ def eval_my_new_test() -> EvalResult:
         passed = False
         details = f"Error: {str(e)}"
         score = 0.0
-    
+
     latency = (time.time() - start) * 1000
     return EvalResult("my_new_eval", passed, score, details, latency)
 ```

@@ -35,7 +35,14 @@
         "deworming with levonorrine"
       ],
       "prose_required": true,
-      "no_forced_list": true
+      "no_forced_list": true,
+      "reference_answer": "Tetanus in goats is a serious, non-contagious bacterial disease caused by Clostridium tetani. The bacteria produce powerful neurotoxins that enter through puncture wounds, cuts, or surgical sites, causing extreme muscle stiffness, spasms, and lockjaw.",
+      "semantic_concepts": [
+        "bacterial disease caused by Clostridium tetani",
+        "spores enter through deep puncture wounds or skin injuries",
+        "symptoms include muscle stiffness spasms and lockjaw"
+      ],
+      "min_semantic_score": 0.7
     },
     {
       "id": "eval_vet_02_goat_tetanus_short_query_en",
@@ -68,7 +75,14 @@
         "poultry",
         "Tetracycline is the recommended antibiotic for wound treatment in goats, especially post-surgical"
       ],
-      "prose_required": true
+      "prose_required": true,
+      "reference_answer": "Tetanus in goats is a serious, non-contagious bacterial disease caused by Clostridium tetani. The bacteria produce powerful neurotoxins that enter through puncture wounds, cuts, or surgical sites, causing extreme muscle stiffness, spasms, and lockjaw.",
+      "semantic_concepts": [
+        "bacterial disease caused by Clostridium tetani",
+        "spores enter through deep puncture wounds or skin injuries",
+        "symptoms include muscle stiffness spasms and lockjaw"
+      ],
+      "min_semantic_score": 0.7
     },
     {
       "id": "eval_vet_03_poultry_coccidiosis_def_en",
@@ -100,7 +114,14 @@
         "well-well",
         "goat"
       ],
-      "prose_required": true
+      "prose_required": true,
+      "reference_answer": "Coccidiosis in poultry is an intestinal parasitic infection caused by Eimeria protozoa, leading to bloody diarrhea, droopiness, ruffled feathers, and poor feed conversion.",
+      "semantic_concepts": [
+        "intestinal parasite protozoa Eimeria",
+        "bloody diarrhea and ruffled feathers droopiness",
+        "treatment using anticoccidial medications and dry litter"
+      ],
+      "min_semantic_score": 0.7
     },
     {
       "id": "eval_vet_04_poultry_newcastle_en",
@@ -569,7 +590,13 @@
         "dem",
         " di ",
         "well-well"
-      ]
+      ],
+      "reference_answer": "Optimal feed formulation calculates the optimal mixture of local ingredients like maize, soya meal, fish meal, and premix to achieve required crude protein and metabolizable energy at minimal cost.",
+      "semantic_concepts": [
+        "optimal ingredient mixing for crude protein and energy",
+        "significant cost savings compared to commercial bags"
+      ],
+      "min_semantic_score": 0.68
     },
     {
       "id": "eval_feed_02_chicks_starter_nutrition_en",
@@ -599,7 +626,13 @@
         "dem",
         " di ",
         "well-well"
-      ]
+      ],
+      "reference_answer": "Optimal feed formulation calculates the optimal mixture of local ingredients like maize, soya meal, fish meal, and premix to achieve required crude protein and metabolizable energy at minimal cost.",
+      "semantic_concepts": [
+        "optimal ingredient mixing for crude protein and energy",
+        "significant cost savings compared to commercial bags"
+      ],
+      "min_semantic_score": 0.68
     },
     {
       "id": "eval_feed_03_pig_local_maize_en",
@@ -686,7 +719,13 @@
         "dem",
         " di ",
         "well-well"
-      ]
+      ],
+      "reference_answer": "Cassava mosaic disease is a viral infection transmitted by whiteflies and infected stem cuttings, causing mottled, distorted leaves and stunted tuber yield.",
+      "semantic_concepts": [
+        "viral disease transmitted by whitefly Bemisia tabaci",
+        "leaf mosaic distortion and chlorosis"
+      ],
+      "min_semantic_score": 0.7
     },
     {
       "id": "eval_crop_02_maize_fall_armyworm_en",
@@ -813,7 +852,14 @@
       "must_not_contain": [
         "```json",
         "function_name"
-      ]
+      ],
+      "reference_answer": "Tetanus in goats is a serious, non-contagious bacterial disease caused by Clostridium tetani. The bacteria produce powerful neurotoxins that enter through puncture wounds, cuts, or surgical sites, causing extreme muscle stiffness, spasms, and lockjaw.",
+      "semantic_concepts": [
+        "bacterial disease caused by Clostridium tetani",
+        "spores enter through deep puncture wounds or skin injuries",
+        "symptoms include muscle stiffness spasms and lockjaw"
+      ],
+      "min_semantic_score": 0.7
     },
     {
       "id": "eval_hausa_02_flock_query",
@@ -933,6 +979,62 @@
       ],
       "must_contain": [
         "goat"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ]
+    },
+    {
+      "id": "eval_feed_01_broiler_starter_formulation",
+      "category": "feed_optimization",
+      "language": "english",
+      "description": "Formulate balanced broiler starter feed with Linear Programming.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "How can I mix cheap 100kg feed for my 3-week broilers using maize and soya?"
+        }
+      ],
+      "expected_tools": [
+        "optimize_feed_formulation"
+      ],
+      "must_contain": [
+        "Feed Formula",
+        "Broiler",
+        "50kg"
+      ],
+      "must_not_contain": [
+        "```json",
+        "function_name"
+      ],
+      "reference_answer": "Optimal feed formulation calculates the optimal mixture of local ingredients like maize, soya meal, fish meal, and premix to achieve required crude protein and metabolizable energy at minimal cost.",
+      "semantic_concepts": [
+        "optimal ingredient mixing for crude protein and energy",
+        "significant cost savings compared to commercial bags"
+      ],
+      "min_semantic_score": 0.68
+    },
+    {
+      "id": "eval_feed_02_layer_mash_pidgin",
+      "category": "feed_optimization",
+      "language": "pidgin",
+      "description": "Cheapest layer mash feed formulation in Nigerian Pidgin.",
+      "farm_id": "farm_9eb3f441",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Wetin be di cheapest feed formula for 500 layers to lay eggs?"
+        }
+      ],
+      "expected_tools": [
+        "optimize_feed_formulation"
+      ],
+      "must_contain": [
+        "Feed",
+        "Layer",
+        "50kg"
       ],
       "must_not_contain": [
         "```json",

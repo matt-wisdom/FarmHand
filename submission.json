@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0.0",
+  "profiler_version": "0.1.0",
+  "submission": {
+    "team_id": "farmhand-ai-team",
+    "domain": "agriculture",
+    "language_scope": [
+      "en",
+      "ha",
+      "pcm"
+    ],
+    "african_alpha_claim": true,
+    "budget_laptop_claim": true,
+    "submitter": {
+      "name": "FarmHand AI Team",
+      "email": "team@farmhand.africa",
+      "github_handle": "matt-wisdom"
+    },
+    "cross_disciplinary_pairing": {
+      "discipline": "Operations Research & Veterinary Epidemiology",
+      "load_bearing": true,
+      "description": "Linear programming least-cost feed formulation (SciPy LP) and unsupervised IsolationForest disease outbreak surveillance integrated with local Qwen 2.5 reasoning"
+    },
+    "test_prompts": [
+      {
+        "prompt_id": "tp_001",
+        "prompt": "Formulate a balanced broiler starter feed using local Nigerian ingredients with minimum 22% crude protein."
+      },
+      {
+        "prompt_id": "tp_002",
+        "prompt": "4 goats died sudden-sudden and foam dey commot their mouth. Wetin fit cause am and wetin I suppose do immediately?"
+      }
+    ],
+    "model": {
+      "name": "Qwen2.5-3B-Instruct-Q4_K_M-FarmHand",
+      "runtime": "llama.cpp",
+      "quantization": "GGUF Q4_K_M",
+      "parameters_estimate": "3B",
+      "packaging": "binary_bundle"
+    }
+  },
+  "environment": {
+    "measured_on": "participant_laptop",
+    "cpu_model": "Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz",
+    "ram_gb": 15.09,
+    "gpu": "Integrated Intel UHD / Iris Xe Graphics (Zero discrete GPU)",
+    "os": "Linux 6.1.0-40-amd64"
+  },
+  "throughput": {
+    "tokens_per_second_generation": 2.15,
+    "first_token_latency_ms": 1411.0,
+    "prompt_tokens": 128,
+    "generated_tokens": 60
+  },
+  "memory": {
+    "peak_rss_mb": 3346.6,
+    "steady_state_rss_mb": 3329.4
+  },
+  "accuracy": [
+    {
+      "benchmark": "farmhand_agri_vet_benchmark",
+      "dataset_version": "1.0.0",
+      "language": "en",
+      "samples": 50,
+      "score": 0.92,
+      "metric": "accuracy"
+    }
+  ],
+  "cpu_thermal": {
+    "cpu_percent_p99": 45.0,
+    "core_temp_c_peak": 84.0,
+    "throttled": false
+  },
+  "reproducibility": {
+    "git_commit_sha": "fbb9a433ef215a995350dfc991a8907ade4f59f8",
+    "docker_image_digest": "none",
+    "random_seed": 42
+  },
+  "model_info": {
+    "params_count": 3000000000,
+    "context_length": 4096,
+    "architecture": "Qwen2ForCausalLM"
+  }
+}
