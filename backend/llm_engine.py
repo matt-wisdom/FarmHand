@@ -606,10 +606,16 @@ def generate_stateless_answer(
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
             f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Directly and accurately answer the farmer's question using the reference knowledge base.\n"
+            "- Directly and accurately answer the farmer's question or acknowledge ledger entries.\n"
+            "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
+            "  * Follow the active farm species scope shown above. If this is a poultry farm, focus exclusively on poultry (birds, chickens, broilers, layers) unless the farmer asks about another animal.\n"
+            "  * If REFERENCE KNOWLEDGE BASE has FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
+            "    1. Confirm that the entry is recorded in the ledger (e.g. 'I don record the 20 new chickens inside your flock ledger successfully!').\n"
+            "    2. Provide 2-3 quick, high-value initial care tips for the animals (e.g. clean warm pen, anti-stress water, starter feed).\n"
+            "    3. NEVER mention goat health or unrelated sickness when the farmer is just adding new animals.\n"
             "- For feeding & nutrition: explain ingredients, protein needs, local substitutes (e.g. rice bran, fish meal), and preparation steps.\n"
             "- For diseases & symptoms: evaluate symptoms against reference documents, name suspected conditions (e.g. PPR, enterotoxemia/pulpy kidney, plant/chemical poisoning), give supportive first aid, and advise calling a vet.\n"
-            "- NEVER output placeholder promises like 'I will log this now', 'I am logging...', 'I go log am now', or 'I go help you record...'. Provide immediate clinical diagnosis and emergency action steps directly."
+            "- NEVER output placeholder promises like 'I will log this now', 'I am logging...', 'I go log am now', or 'I go help you record...'. Provide immediate confirmation or clinical advice directly."
         )
         prefill = ""
 
@@ -632,12 +638,23 @@ def generate_stateless_answer(
             "3. Add bone meal (2-3%), limestone (1%), salt, and broiler premix."
         )
 
+        pidgin_few_shot_3_user = "Hello, I just bought 20 chickens"
+        pidgin_few_shot_3_assistant = (
+            "I don record the 20 new chickens inside your flock ledger successfully! Your total bird count don update now.\n\n"
+            "**Quick advice for the new birds**:\n"
+            "1. **Warm Pen**: Put them for clean, warm pen with fresh wood shavings make cold no catch them.\n"
+            "2. **Clean Water**: Give them clean water with anti-stress vitamins make them relax after transport.\n"
+            "3. **Good Feed**: Give them quality chick starter feed make them grow quick-quick."
+        )
+
         chatml_parts = [
             f"<|im_start|>system\n{system_prompt}<|im_end|>",
             f"<|im_start|>user\n{pidgin_few_shot_1_user}<|im_end|>",
             f"<|im_start|>assistant\n{pidgin_few_shot_1_assistant}<|im_end|>",
             f"<|im_start|>user\n{pidgin_few_shot_2_user}<|im_end|>",
             f"<|im_start|>assistant\n{pidgin_few_shot_2_assistant}<|im_end|>",
+            f"<|im_start|>user\n{pidgin_few_shot_3_user}<|im_end|>",
+            f"<|im_start|>assistant\n{pidgin_few_shot_3_assistant}<|im_end|>",
         ]
     else:
         system_prompt = (
@@ -647,7 +664,14 @@ def generate_stateless_answer(
             f"FARM INVENTORY & PROFILE:\n{db_summary}\n\n"
             f"REFERENCE KNOWLEDGE BASE & CLINICAL RECORDS:\n{safe_context}\n\n"
             "INSTRUCTIONS:\n"
-            "- Directly and accurately answer the farmer's specific question in natural, clear sentences or paragraphs.\n"
+            "- Directly and accurately answer the farmer's specific question or confirm ledger updates in natural, clear sentences.\n"
+            "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
+            "  * Always tailor all responses to the target species of the active farm profile shown above. If the active farm is a Poultry farm, all general advice, confirmations, and nutrition must focus on poultry (chickens, broilers, layers) unless the farmer explicitly mentions a different animal.\n"
+            "  * When REFERENCE KNOWLEDGE BASE contains a FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
+            "    1. Confirm the transaction clearly (e.g. 'Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger. Your total flock balance is now updated.').\n"
+            "    2. Provide 2-3 concise, practical next steps (e.g. brooding warmth, clean water with anti-stress vitamins, starter feed).\n"
+            "    3. NEVER say 'I will focus on goat health' or invent disease symptoms when the farmer is simply adding or buying animals.\n"
+            "    4. NEVER say 'I can record this if you like' when the record is already logged in the database.\n"
             "- For disease names, overviews, or 'what is' questions (e.g. 'tetanus in goats', 'what is tetanus', 'coccidiosis in poultry'): Directly provide a comprehensive, accurate explanation. Always state what the disease is, its causative pathogen (bacteria, virus, or parasite), mode of transmission/infection (e.g. soil bacteria entering puncture wounds), key clinical symptoms (e.g. muscle stiffness, lockjaw, rigid posture), and prevention/control before veterinary care.\n"
             "- For clinical symptoms / sudden death queries (e.g. sudden mortality, foaming from mouth, respiratory distress, scours): Identify the probable suspect diseases based on reference documents (e.g. Enterotoxemia / Pulpy Kidney, acute poisoning/chemical toxin, or acute PPR), explain why, and provide immediate biosecurity and supportive action steps.\n"
             "- NEVER ask questions about database tags, pen numbers, or technical IDs during a medical/symptom inquiry. Focus directly on clinical triage and supportive care.\n"
@@ -676,12 +700,24 @@ def generate_stateless_answer(
             "2. Add wheat offal or rice bran (10-15%) for fiber and energy balance.\n"
             "3. Mix in bone meal (2-3%), limestone (1%), salt (0.3%), and a standard broiler premix with essential vitamins and minerals."
         )
+
+        few_shot_3_user = "Hello, I just bought 20 chickens"
+        few_shot_3_assistant = (
+            "Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger! Your active flock balance is now updated.\n\n"
+            "**Recommended Initial Management Steps**:\n"
+            "1. **Brooding & Warmth**: Ensure the coop is clean, dry, draft-free, and pre-warmed with fresh litter.\n"
+            "2. **Hydration & Anti-Stress**: Provide clean drinking water mixed with vital electrolytes or glucose for the first 24-48 hours.\n"
+            "3. **Nutrition**: Supply high-protein chick starter mash (20-22% crude protein) in easily accessible feeders."
+        )
+
         chatml_parts = [
             f"<|im_start|>system\n{system_prompt}<|im_end|>",
             f"<|im_start|>user\n{few_shot_1_user}<|im_end|>",
             f"<|im_start|>assistant\n{few_shot_1_assistant}<|im_end|>",
             f"<|im_start|>user\n{few_shot_2_user}<|im_end|>",
             f"<|im_start|>assistant\n{few_shot_2_assistant}<|im_end|>",
+            f"<|im_start|>user\n{few_shot_3_user}<|im_end|>",
+            f"<|im_start|>assistant\n{few_shot_3_assistant}<|im_end|>",
         ]
 
     # Build ChatML history
