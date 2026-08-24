@@ -16,6 +16,10 @@ build/
 .DS_Store
 *.log
 *.lock
+*.db
+farm_local.db
+backend/farm_local.db
+!backend/models/knowledge_chunks.db
 *.fuse_hidden*
 .fuse_hidden*
 *farmhand.db

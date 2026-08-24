@@ -12,6 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 INDEX_PATH = MODELS_DIR / "vector_store.index"
 FASTEMBED_CACHE_DIR = MODELS_DIR / "fastembed_cache"
+KNOWLEDGE_DB_PATH = MODELS_DIR / "knowledge_chunks.db"
+
+
+def get_chunks_db_path() -> Path:
+    if KNOWLEDGE_DB_PATH.exists():
+        return KNOWLEDGE_DB_PATH
+    return DB_PATH
+
 
 MODEL_NAME = os.getenv("FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5")
 
@@ -175,7 +183,7 @@ def vector_search(query: str, top_k: int = 10) -> list[dict[str, Any]]:
         sqlite_ids = [faiss_id + 1 for faiss_id in hit_ids]
         placeholders = ",".join(["?"] * len(sqlite_ids))
 
-        with get_db_connection(DB_PATH) as conn:
+        with get_db_connection(get_chunks_db_path()) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 f"SELECT id, filename, chunk_id, text FROM document_chunks WHERE id IN ({placeholders})",  # noqa: S608
@@ -238,7 +246,7 @@ def bm25_search(query: str, top_k: int = 10) -> list[dict[str, Any]]:
         ]
         placeholders = ",".join(["?"] * len(sqlite_ids))
 
-        with get_db_connection(DB_PATH) as conn:
+        with get_db_connection(get_chunks_db_path()) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 f"SELECT id, filename, chunk_id, text FROM document_chunks WHERE id IN ({placeholders})",  # noqa: S608
