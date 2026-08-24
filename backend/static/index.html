@@ -20,6 +20,20 @@
   <!-- Custom External CSS -->
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+
+  <!-- Prevent FOUC: Immediate theme initialization -->
+  <script>
+    (function() {
+      try {
+        const saved = localStorage.getItem('farmhand_theme');
+        if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div id="app">
@@ -1406,7 +1420,16 @@
     createApp({
       setup() {
         const currentTab = ref('assistant');
-        const isDarkMode = ref(false);
+        const getSavedTheme = () => {
+          try {
+            const saved = localStorage.getItem('farmhand_theme');
+            if (saved) return saved === 'dark';
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          } catch (e) {
+            return false;
+          }
+        };
+        const isDarkMode = ref(getSavedTheme());
         const isLoading = ref(true);
         const isMobileSidebarOpen = ref(false);
         const toasts = ref([]);
@@ -2556,7 +2579,13 @@
 
         const toggleTheme = () => {
           isDarkMode.value = !isDarkMode.value;
-          document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light');
+          const theme = isDarkMode.value ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+          try {
+            localStorage.setItem('farmhand_theme', theme);
+          } catch (e) {
+            console.error('Error saving theme to localStorage:', e);
+          }
         };
 
         const fetchHealth = async () => {
@@ -2572,6 +2601,7 @@
         };
 
         onMounted(async () => {
+          document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light');
           selectedLanguage.value = getSavedLanguage();
           await fetchFarms();
           if (farms.value.length === 0) {
