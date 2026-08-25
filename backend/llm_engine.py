@@ -18,7 +18,12 @@ logger = logging.getLogger("FarmHandEngine")
 
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
-MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
+MODEL_PATH = (
+    MODELS_DIR / "qwen2.5-1.5b-instruct.Q4_K_M.gguf"
+    if (MODELS_DIR / "qwen2.5-1.5b-instruct.Q4_K_M.gguf").exists()
+    or not (MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf").exists()
+    else MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
+)
 
 # Hardware-scaled CPU threads and full 4k context window
 N_CTX = 4096

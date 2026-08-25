@@ -1,0 +1,294 @@
+# Priority open-access Nigeria agro knowledge sources for seed download.
+# Only publicly published institutional PDFs / pages. No paywalled textbooks.
+
+sources:
+  # --- IITA production guides (Northern Nigeria) ---
+  - title: "Guide to Rice Production in Northern Nigeria"
+    url: "https://www.iita.org/wp-content/uploads/2020/07/Guide-to-Rice-Production-in-Northern-Nigeria.pdf"
+    source: iita
+    category: extension_guide
+    topics: [rice, production, northern_nigeria, pest, disease]
+    license: "IITA open publication (institutional)"
+
+  - title: "Guide to Cowpea Production in Northern Nigeria"
+    url: "https://www.iita.org/wp-content/uploads/2020/07/Guide-to-Cowpea-production-in-Northern-Nigeria.pdf"
+    source: iita
+    category: extension_guide
+    topics: [cowpea, production, northern_nigeria, pest, disease]
+    license: "IITA open publication (institutional)"
+
+  - title: "Guide to Soybean Production in Northern Nigeria"
+    url: "https://www.iita.org/wp-content/uploads/2020/07/Guide-to-Soybean-Production-in-Northern-Nigeria..pdf"
+    source: iita
+    category: extension_guide
+    topics: [soybean, production, northern_nigeria, disease]
+    license: "IITA open publication (institutional)"
+
+  - title: "Guide to Maize Production in Northern Nigeria"
+    url: "https://biblio.iita.org/documents/U20BkKamaraMaizeNothomNodev.pdf-0fe7595936d0dfc6f3535474610e8cbe.pdf"
+    source: iita
+    category: extension_guide
+    topics: [maize, production, northern_nigeria, striga, pest]
+    license: "IITA open publication (institutional)"
+
+  # --- NAERLS extension bulletins ---
+  - title: "Herd Health Management in Farm Animals"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Herd-Health-Management-in-Farm-Animals.pdf"
+    source: naerls
+    category: livestock_health
+    topics: [livestock_health, disease, cattle, sheep, goat, quarantine]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Bull and Ram Fattening"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Bull-and-Ram-Fattening.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [cattle, sheep, feeding, husbandry]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Pepper Production Under Irrigation"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Pepper-Production-Under-Irrigation.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [pepper, irrigation, production]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Integrated Aquaculture Technologies for Fish Farmers"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Integrated-Aquaculture-Technologies-for-Fish-Farmers.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, aquaculture, husbandry]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Control of Worms in Cattle Sheep and Goats"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Control-of-Worms-in-Cattle-Sheep-and-Goats.pdf"
+    source: naerls
+    category: livestock_health
+    topics: [livestock_health, worms, cattle, sheep, goat, treatment]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Duck Production in Nigeria"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Duck-Production-in-Nigeria.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [poultry, duck, husbandry]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Feed Formulation and Feeding Practices in Nigeria Fish Culture"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Feed-Formulation-and-Feeding-Practices-in-Nigeria-Fish-Culture.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [feed, fish, aquaculture, nutrition]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Heat Tolerant Tomato Production Under Irrigation"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Heat-Tolerant-Tomato-Production-Under-Irrigation.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [tomato, irrigation, production]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Irrigated Onion Production And Management"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Irrigated-Onion-Production-And-Management.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [onion, irrigation, production]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "CASSAVA Production Processing and Utilization"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/CASSAVA-Production-Processing-and-utilization.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [cassava, production, processing, disease]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Rice Production Processing Utilization and Marketing in Nigeria"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Rice-Production-Processing-Utilization-and-Marketing-in-Nigeria.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [rice, production, processing, marketing]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "The Production of Guinea Fowl in Nigeria"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/The-Production-of-Guinea-Fowl-in-Nigeria.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [poultry, guinea_fowl, husbandry]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Snail Production Techniques in Nigeria"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Snail-Production-Techniques-in-Nigeria.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [snail, husbandry]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Water Quality Management in Fish Culture"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Water-Quality-Management-in-Fish-Culture.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, water_quality, aquaculture]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Tomato Processing and Utilization"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Tomato-Processing-and-Utilization.pdf"
+    source: naerls
+    category: extension_guide
+    topics: [tomato, processing]
+    license: "NAERLS extension bulletin (institutional)"
+
+  # --- ICRISAT Nigeria guides ---
+  - title: "A Farmer's Guide to Profitable Groundnut Production in Nigeria"
+    url: "https://oar.icrisat.org/8856/1/2015-084%20Gnut%20Production%20in%20Nigeria.pdf"
+    source: icrisat
+    category: extension_guide
+    topics: [groundnut, production, disease, rosette, nigeria]
+    license: "ICRISAT open access (institutional)"
+
+  - title: "Handbook on Improved Agronomic Practices of Groundnut Production in North East Nigeria"
+    url: "https://oar.icrisat.org/11529/1/Groundnut%20Production%20Manual_printed%20version.pdf"
+    source: icrisat
+    category: extension_guide
+    topics: [groundnut, production, north_east_nigeria, disease]
+    license: "ICRISAT open access (institutional)"
+
+  - title: "Groundnut Cropping Guide ASHC"
+    url: "https://oar.icrisat.org/10832/1/562-ASHC-English-Groundnut-A4-bw-lowres.pdf"
+    source: icrisat
+    category: extension_guide
+    topics: [groundnut, soil, fertilizer, pest, disease]
+    license: "ICRISAT / ASHC open publication"
+
+  # --- FAO ---
+  - title: "Save and Grow Cassava"
+    url: "https://www.fao.org/4/i3278e/i3278e.pdf"
+    source: fao
+    category: production_manual
+    topics: [cassava, disease, pest, soil, fertilizer]
+    license: "FAO open knowledge"
+
+  # --- CGSpace known livestock / disease items ---
+  - title: "Animal health in subhumid Nigeria"
+    url: "https://cgspace.cgiar.org/bitstreams/8992c310-fbc8-4cf2-a9ea-3fa5ab6e4bdd/download"
+    source: cgspace
+    category: research
+    topics: [livestock_health, nigeria, cattle, disease]
+    license: "CGIAR open access"
+    notes: "May resolve via item page; harvester preferred if direct bitstream fails"
+
+  # --- Africa CDC animal disease burden (open) ---
+  - title: "Animal disease burden in Nigeria 2006-2023"
+    url: "https://khub.africacdc.org/records/resource/animal-disease-burden-in-nigeria-2006-2023"
+    source: africacdc
+    category: research
+    topics: [livestock_health, disease, nigeria, surveillance]
+    license: "Open Access"
+    notes: "Landing page; download_sources will save HTML and note PDF if linked"
+
+  # --- Extra NAERLS animal / aquaculture bulletins ---
+  - title: "Restraining Techniques in Farm Animals"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Restraining-Techniques-in-Farm-Animals.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [livestock, handling, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Hatchery Management Practices in Poultry"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Harchery-Management-Practices-in-Poultry.pdf"
+    source: naerls
+    category: livestock_husbandry
+    topics: [poultry, hatchery, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Fish Culture in Ponds"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Fish-Culture-in-Ponds.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, aquaculture, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Fish Pond Fertilization Techniques"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Fish-Pond-Fertilization-Techniques.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, pond, fertilizer, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Fish Pond Site Selection and Construction"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Fish-Pond-Site-Selection-and-Construction.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, pond, construction, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Transporting Fish for Culture"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Transporting-Fish-for-Culture.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, transport, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Preparation Processing and Utilization of Fish Products"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Preparation-Processing-and-Utilization-of-Fish-Products.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, processing, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+  - title: "Economics of Aquaculture Production"
+    url: "https://naerls.gov.ng/wp-content/uploads/2022/11/Economics-of-Aquaculture-Production.pdf"
+    source: naerls
+    category: aquaculture
+    topics: [fish, economics, animal]
+    license: "NAERLS extension bulletin (institutional)"
+
+# CGSpace search queries for automated harvest (animal-heavy expansion)
+cgspace_queries:
+  - "Nigeria disease livestock"
+  - "Nigeria pest crop"
+  - "Nigeria extension agriculture"
+  - "Nigeria goat health"
+  - "Nigeria cassava mosaic"
+  - "Nigeria maize fall armyworm"
+  - "Nigeria poultry disease"
+  - "Nigeria PPR sheep goat"
+  - "Nigeria cattle CBPP"
+  - "Nigeria Newcastle disease poultry"
+  - "Nigeria trypanosomiasis cattle"
+  - "Nigeria animal health"
+  - "Nigeria livestock master plan"
+  - "Nigeria small ruminant"
+  - "Nigeria village goat"
+  - "Nigeria sheep goat management"
+  - "Nigeria dairy cattle"
+  - "Nigeria pig production"
+  - "Nigeria aquaculture fish disease"
+  - "Nigeria veterinary extension"
+  - "Nigeria livestock feed"
+  - "Nigeria tick disease cattle"
+  - "Nigeria FMD livestock"
+  - "Nigeria avian influenza"
+  - "West Africa goat disease"
+  - "West Africa cattle health Nigeria"
+  - "ILRI Nigeria livestock"
+  - "Nigeria pastoralist livestock"
+  - "Nigeria ruminant production"
+  - "Nigeria poultry value chain disease"
+
+# IITA listing pages to crawl for additional Nigeria guides
+iita_listing_urls:
+  - "https://www.iita.org/publications/"
+  - "https://www.iita.org/"
+
+# Hugging Face Q&A datasets
+hf_datasets:
+  - id: "Professor/naija-agri-dataset-yoruba-hausa"
+    languages: [yo, ha, en]
+  - id: "AgroguardAI/agri-qa"
+    languages: [ha, yo, ig, ff]
+  - id: "BabsDest/yoruba_pidgin_agriculture_data"
+    languages: [yo, pcm]
+  - id: "AliyuDikko/dikko-ai-noma-da-kiwo-hausa-dataset"
+    languages: [ha]
+  - id: "suhasreddykotla222/agrohealth-hausa"
+    languages: [ha]
