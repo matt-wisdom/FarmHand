@@ -100,15 +100,16 @@ bash download_model.sh
 python scripts/adtc_profiler.py --output submission.json
 ```
 
-### 4. Launch the Application
+### 4. Launch the Application (Single-Command)
 ```bash
-# Install dependencies
+# Automated turn-key runner: installs dependencies, checks models, starts server, and opens browser
+python run.py
+```
+
+*Or manually:*
+```bash
 uv pip install -r backend/requirements.txt
-
-# Start local server
-cd backend
-python main.py
-
+uvicorn --app-dir backend main:app --host 127.0.0.1 --port 8000
 # Open browser at: http://localhost:8000
 ```
 
