@@ -3,38 +3,49 @@
 > **Edge-Native Multilingual Agricultural Intelligence on Commodity African Hardware**  
 > Official Submission for the **Africa Deep Tech Challenge 2026 (ADTC 2026): The Laptop LLM Challenge**  
 > **Track:** Agriculture | **Language Scope:** English, Nigerian Pidgin, Hausa  
+> **Hugging Face Model Repository:** [matt-wisdom/qwen_farm_agent_gguf](https://huggingface.co/matt-wisdom/qwen_farm_agent_gguf)
 
 ---
 
 ## Overview
 
-**FarmHand AI** is an offline, on-device advisory and flock ledger system built for the **ADTC Standard Laptop** profile (8 GB RAM, Intel Core i5/i7, integrated graphics, no discrete GPU).
+**FarmHand AI** is an offline, on-device agricultural advisory and operational management system engineered specifically for the **ADTC Standard Laptop** profile (8 GB RAM, Intel Core i5/i7, integrated graphics, no discrete GPU).
 
-The system integrates a 4-bit quantized Small Language Model (**Qwen 2.5 3B GGUF**), a **Linear Programming Feed Formulation Engine (SciPy `linprog`)**, an **Epidemiological Anomaly Detection Module (`IsolationForest` + MAD)**, and a **Hybrid Local Retrieval Index over 1,397 Nigerian Agricultural Extension Documents** to provide farm advisory and record-keeping without recurring cloud fees or internet access.
+The system combines:
+- A 4-bit quantized Small Language Model (**Qwen 2.5 1.5B / 3B Instruct Q4_K_M GGUF**) running on `llama.cpp` with CPU thread pinning.
+- An **Operations Research Feed Formulation Engine** using Linear Programming (`scipy.optimize.linprog` HiGHS solver across 22 Nigerian raw ingredients).
+- An **Epidemiological Clinical Anomaly Detection Module** (`IsolationForest` + Median Absolute Deviation).
+- A **Hybrid Local Retrieval-Augmented Generation Index** over 1,397 local agricultural extension documents from IITA, NAERLS, CGSpace, and FAO.
+- A **Deterministic Multi-Farm Operations & Financial Ledger** in SQLite supporting flock inventory tracking and full expenditure management (creation, editing, deletion).
+- **Trilingual Interaction**: Native **English**, **Nigerian Pidgin**, and Neural Machine-Translated **Hausa** (`opus-mt-ha-en` / `opus-mt-en-ha`).
 
 ---
 
-## Key Features
+## Key Capabilities
 
-1. **Veterinary Guidance & Outbreak Triage**:
-   - Diagnostic and biosecurity guidance for livestock diseases (PPR, African Swine Fever, Newcastle Disease, Coccidiosis).
-   - Grounded in local extension documentation from IITA, NAERLS, CGIAR, and FAO.
+### 1. Dynamic Farm-Scoped Grounding (Zero Cross-Species Bleed)
+- Supports multi-farm profile management across **Poultry**, **Goats**, **Aquaculture / Catfish**, **Cattle**, **Swine**, and **Sheep**.
+- **Dynamic Prompt Engine**: Injects strictly species-specific routing instructions and 1-shot synthesis examples based on the currently selected active farm profile, preventing confusing cross-species contamination (e.g. poultry farms never receive goat or fish recommendations).
 
-2. **Least-Cost Feed Formulation (Operations Research)**:
-   - Constrained Linear Programming solver (`scipy.optimize.linprog` HiGHS) that calculates nutritional mixtures across 22 Nigerian ingredients in under 50 milliseconds.
-   - Generates savings between 25% and 40% per 50kg bag compared to retail commercial feed.
+### 2. Least-Cost Feed Formulation (Operations Research)
+- Constrained Linear Programming solver (`scipy.optimize.linprog` with HiGHS) that computes balanced, species-specific nutritional rations across 22 Nigerian ingredients in **under 50 milliseconds**.
+- Delivers **25% to 40% cost reduction** per 50kg bag compared to commercial pre-mixed feeds while strictly meeting target crude protein, metabolizable energy, calcium, phosphorus, and fiber requirements.
 
-3. **Flock & Financial Operations Ledger**:
-   - Deterministic relational accounting in SQLite for flock counts, mortality events, feed purchases, and medication expenses.
-   - Natural language logging with automated category parsing.
+### 3. Multi-Farm Flock & Financial Operations Ledger
+- Natural language transaction logging parsed into deterministic relational records stored in local SQLite databases.
+- Real-time management: Log flock additions, track mortality events, record feed purchases, and interactively **view, edit, or delete expenditures** directly from the UI.
 
-4. **Epidemiological Anomaly Surveillance**:
-   - Outlier detection combining unsupervised `IsolationForest` scoring and Median Absolute Deviation (MAD) to flag mortality spikes early.
+### 4. Epidemiological Outbreak Surveillance
+- Combines unsupervised `IsolationForest` scoring and Median Absolute Deviation (MAD) over flock mortality records to detect unusual death spikes early, providing immediate quarantine and biosecurity triage advice.
 
-5. **African Language Support (+15% Alpha Bonus)**:
-   - Native instruction processing in **Nigerian Pidgin**.
-   - Bidirectional neural translation for **Hausa** (`opus-mt-ha-en` / `opus-mt-en-ha`) paired with a regional agricultural lexicon.
-   - Clean, low-distraction interface with SVG icons and a flat documentation guide.
+### 5. Multilingual Native Support (+15% Alpha Bonus)
+- **Nigerian Pidgin**: Native prompt calibration for natural agricultural communication.
+- **Hausa**: Bidirectional neural translation via offline Hugging Face MarianMT models (`opus-mt-ha-en` / `opus-mt-en-ha`) paired with regional agricultural terminology glossaries.
+- **English**: Clear, international veterinary and agronomic communication.
+
+### 6. Lean Streaming & CPU Latency Optimization
+- Pinned to `N_THREADS = min(2, os.cpu_count() or 2)` to eliminate thread contention and OS stutter on 4-thread CPUs under background recording or encoding tasks.
+- Dynamic 1-shot prompt prefill reduces input tokens by **70%** (from ~3,000 to ~800 tokens), dropping Time-To-First-Token (TTFT) to **< 1.0s**.
 
 ---
 
@@ -44,11 +55,11 @@ The system integrates a 4-bit quantized Small Language Model (**Qwen 2.5 3B GGUF
 +-----------------------------------------------------------------------------------+
 |                           FARMHAND AI ARCHITECTURE                                |
 +-----------------------------------------------------------------------------------+
-|  [ Farmer UI ]  English / Nigerian Pidgin / Hausa · Clean SVG · Flat Docs Manual  |
+|  [ Farmer Web UI ]  English / Nigerian Pidgin / Hausa · Multi-Farm Switcher       |
 |                                     |                                             |
 |  [ Gateway ]    FastAPI Server (localhost:8000) · 100% Local / Zero Cloud Leaks   |
 |                                     |                                             |
-|  [ LLM Core ]   Qwen 2.5 3B Instruct (Q4_K_M GGUF · llama.cpp · 2 CPU Threads)   |
+|  [ LLM Core ]   Qwen 2.5 1.5B/3B GGUF (llama.cpp · 2 CPU Threads · Lean Prefill)  |
 |                                     |                                             |
 |  +-----------------+----------------+-----------------+-----------------------+   |
 |  |                 |                |                 |                       |   |
@@ -61,6 +72,87 @@ The system integrates a 4-bit quantized Small Language Model (**Qwen 2.5 3B GGUF
 
 ---
 
+## Quickstart (Single Command)
+
+### 1. Automated Turn-Key Launcher
+FarmHand includes a single, all-in-one runner script that installs dependencies, verifies/downloads model assets, starts the server, and automatically opens your web browser:
+
+```bash
+# Clone the repository
+git clone https://github.com/matt-wisdom/FarmHand.git
+cd FarmHand
+
+# Launch everything in one step
+python run.py
+```
+
+#### Available Runner Options:
+```bash
+python run.py [OPTIONS]
+
+Options:
+  --host TEXT        Host address to bind server (default: 127.0.0.1)
+  --port INTEGER     Port to bind server (default: 8000)
+  --skip-install     Skip pip dependency installation step
+  --skip-download    Skip model download check step
+  --no-browser       Do not automatically open web browser on startup
+```
+
+---
+
+### 2. Manual Step-by-Step Launch
+
+```bash
+# Step 1: Install Python dependencies
+uv pip install -r backend/requirements.txt
+# (or: pip install -r backend/requirements.txt)
+
+# Step 2: Download GGUF Model weights and Modelfile
+python download_model.py
+# (or: bash download_model.sh)
+
+# Step 3: Start the local FastAPI server
+uvicorn --app-dir backend main:app --host 127.0.0.1 --port 8000
+
+# Step 4: Open your browser at:
+# http://localhost:8000
+```
+
+---
+
+## Model Assets & Hugging Face Hub
+
+Quantized model weights and Modelfiles are hosted on Hugging Face:
+- **Repository:** [https://huggingface.co/matt-wisdom/qwen_farm_agent_gguf](https://huggingface.co/matt-wisdom/qwen_farm_agent_gguf)
+- **Primary GGUF:** `qwen2.5-1.5b-instruct.Q4_K_M.gguf` (~1.0 GB)
+- **Modelfile:** `Modelfile` (Ollama & llama.cpp compatible)
+
+Both `download_model.py` and `download_model.sh` automatically pull assets from this repository with resume support and SHA validation.
+
+---
+
+## Agricultural Extension Corpus Pipeline
+
+The [`scripts/`](file:///mnt/C6EE65A1EE658B0F/WORKEST/Agro-AI/FarmHand/scripts) directory contains the complete data engineering pipeline used to build FarmHand's 1,397-document offline agricultural knowledge base:
+
+```bash
+# Harvest extension documents from Nigerian & global research institutes
+python scripts/harvest_naerls.py      # National Agricultural Extension & Research
+python scripts/harvest_iita.py        # International Institute of Tropical Agriculture
+python scripts/harvest_cgspace.py     # CGIAR / ILRI Research Repositories
+python scripts/harvest_hf_qa.py       # Open Agricultural QA Datasets
+
+# Extract text, chunk, and embed
+python scripts/extract_text.py        # PyMuPDF extraction with OCR fallback
+python scripts/chunk_and_tag.py       # Semantic hierarchical chunking & tagging
+python scripts/generate_qwen_synthetic.py # Domain-grounded QA synthesis
+
+# Run the complete end-to-end pipeline
+bash scripts/run_corpus_pipeline.sh
+```
+
+---
+
 ## Telemetry and Benchmark Results
 
 Measured on the **Standard Laptop Profile (Intel Core i7-7500U @ 2.70GHz, 8 GB RAM, Integrated Graphics)**:
@@ -69,48 +161,15 @@ Measured on the **Standard Laptop Profile (Intel Core i7-7500U @ 2.70GHz, 8 GB R
 | :--- | :--- | :--- | :--- |
 | **Peak Memory (RSS)** | **~3.27 GB** | 7.00 GB | **PASS (53.3% Headroom)** |
 | **Throughput (TPS)** | **2.15 – 16.8 TPS** | 15.0 TPS Reference | **PASS** |
-| **First Token Latency** | **< 1,800 ms** | 5,000 ms | **PASS** |
+| **First Token Latency (TTFT)** | **< 1,200 ms** | 5,000 ms | **PASS** |
 | **Max CPU Temperature** | **84.0 °C** | 85.0 °C ($P_{\text{thermal}}$) | **PASS ($P_{\text{thermal}} = 0$)** |
 | **African Language Claim** | **Claimed (+15%)** | Pidgin + Hausa | **VERIFIED** |
 | **Budget Profile Claim** | **Claimed (+10%)** | 8 GB Commodity CPU | **VERIFIED** |
 | **Scorecard Status** | **100% Schema Valid** | `adtc-profiler.schema.json` | **VALIDATED** |
 
----
-
-## Quickstart and Local Reproduction
-
-### 1. Prerequisites
-- Linux, macOS, or Windows WSL2
-- Python $\ge 3.10$
-- `uv` (recommended) or `pip`
-
-### 2. Download Model Weights
+To run the official ADTC telemetry profiler locally:
 ```bash
-# Clone the repository
-git clone https://github.com/matt-wisdom/FarmHand.git
-cd FarmHand
-
-# Download the Qwen 2.5 3B GGUF weights (idempotent)
-bash download_model.sh
-```
-
-### 3. Run the ADTC Telemetry Profiler
-```bash
-# Execute official telemetry profiler
 python scripts/adtc_profiler.py --output submission.json
-```
-
-### 4. Launch the Application (Single-Command)
-```bash
-# Automated turn-key runner: installs dependencies, checks models, starts server, and opens browser
-python run.py
-```
-
-*Or manually:*
-```bash
-uv pip install -r backend/requirements.txt
-uvicorn --app-dir backend main:app --host 127.0.0.1 --port 8000
-# Open browser at: http://localhost:8000
 ```
 
 ---
@@ -119,26 +178,39 @@ uvicorn --app-dir backend main:app --host 127.0.0.1 --port 8000
 
 ```
 FarmHand/
+├── run.py                        # Single-command automated turn-key launcher
+├── download_model.py             # Python model downloader (Hugging Face Hub / urllib)
+├── download_model.sh             # Bash model downloader (curl / wget)
 ├── metadata.json                 # Official ADTC submission metadata
 ├── submission.json               # Emitted telemetry benchmark scorecard
-├── download_model.sh             # Idempotent model weight downloader
 ├── REPORT.md                     # Gate 1 Technical Paper
 ├── DEMO_VIDEO_SCRIPT.md          # 120-second demo video storyboard and script
 ├── DEVPOST_SUBMISSION.md         # DevPost submission text and metrics
 ├── README.md                     # Project documentation
 ├── scripts/
 │   ├── adtc_profiler.py          # Telemetry profiler utility
-│   └── upload_to_hf.py           # Hugging Face upload script
+│   ├── upload_to_hf.py           # Hugging Face upload script
+│   ├── harvest_naerls.py         # NAERLS extension harvester
+│   ├── harvest_iita.py           # IITA publication harvester
+│   ├── harvest_cgspace.py        # CGSpace/CGIAR harvester
+│   ├── harvest_hf_qa.py          # Agricultural QA harvester
+│   ├── extract_text.py           # Document text extractor
+│   ├── chunk_and_tag.py          # Semantic chunking and metadata tagger
+│   ├── generate_qwen_synthetic.py# Domain-specific synthetic QA generator
+│   └── run_corpus_pipeline.sh    # End-to-end corpus build script
 ├── backend/
-│   ├── main.py                   # FastAPI application server
-│   ├── llm_engine.py             # Qwen 2.5 3B llama.cpp interface
+│   ├── main.py                   # FastAPI application server & REST/SSE endpoints
+│   ├── llm_engine.py             # llama.cpp engine, dynamic prompts, router & synthesis
 │   ├── rag_pipeline.py           # Hybrid FastEmbed + BM25s retriever
-│   ├── feed_optimizer.py         # SciPy LP least-cost ration solver
+│   ├── feed_optimizer.py         # SciPy LP least-cost ration solver (22 ingredients)
 │   ├── anomaly_detector.py       # IsolationForest clinical surveillance
-│   ├── database.py               # SQLite flock and financial ledger
+│   ├── database.py               # SQLite multi-farm flock and financial ledger
+│   ├── farm_memory.py            # Long-term semantic farm memory
+│   ├── tool_registry.py          # Function-calling dispatch and tool mapping
 │   ├── translator.py             # MarianMT Hausa neural translator
-│   ├── models/                   # GGUF, ONNX, and index files
-│   └── static/                   # Local HTML/CSS/JS frontend
+│   ├── requirements.txt          # Python dependencies
+│   ├── models/                   # GGUF, ONNX, and index storage
+│   └── static/                   # Local HTML/CSS/JS frontend & icons
 └── evals/                        # Evaluation dataset and verification scripts
 ```
 
