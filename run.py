@@ -15,6 +15,7 @@ Automated all-in-one launcher:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import signal
 import subprocess
@@ -82,8 +83,12 @@ def install_dependencies() -> None:
 
     print(f"[+] [1/4] Checking and installing dependencies from {REQUIREMENTS_FILE}...")
 
-    # Use uv if installed for lightning-fast installation
-    if shutil.which("uv"):
+    # Use uv if inside a virtualenv, otherwise sys.executable -m pip
+    if shutil.which("uv") and (
+        os.environ.get("VIRTUAL_ENV")
+        or hasattr(sys, "real_prefix")
+        or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
+    ):
         cmd = ["uv", "pip", "install", "-r", str(REQUIREMENTS_FILE)]
     else:
         cmd = [sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)]
@@ -117,18 +122,23 @@ def verify_or_download_model() -> None:
         sys.exit(e.returncode)
 
 
-def wait_for_server(url: str, timeout: float = 45.0) -> bool:
+def wait_for_server(
+    url: str, server_proc: subprocess.Popen | None = None, timeout: float = 30.0
+) -> bool:
     start_time = time.time()
     while time.time() - start_time < timeout:
+        # If server process crashed early, abort waiting immediately
+        if server_proc and server_proc.poll() is not None:
+            return False
         try:
             req = urllib.request.Request(  # noqa: S310
                 url, headers={"User-Agent": "FarmHand-HealthCheck/1.0"}
             )
-            with urllib.request.urlopen(req, timeout=2.0) as resp:  # noqa: S310
+            with urllib.request.urlopen(req, timeout=1.5) as resp:  # noqa: S310
                 if resp.status in (200, 307, 308):
                     return True
         except Exception:
-            time.sleep(0.5)
+            time.sleep(0.4)
     return False
 
 
@@ -165,7 +175,7 @@ def main() -> None:
         str(args.port),
     ]
 
-    server_process = subprocess.Popen(server_cmd)  # noqa: S603
+    server_process = subprocess.Popen(server_cmd, cwd=str(BACKEND_DIR))  # noqa: S603
 
     def signal_handler(sig, frame):
         print("\n[*] Stopping FarmHand AI server...")
@@ -189,7 +199,7 @@ def main() -> None:
     )
 
     print(f"[+] [4/4] Waiting for backend readiness at {health_url}...")
-    if wait_for_server(health_url, timeout=30.0):
+    if wait_for_server(health_url, server_proc=server_process, timeout=30.0):
         print(f"\n[✓] FarmHand AI is LIVE at {app_url}")
         if not args.no_browser:
             print(f"[+] Opening {app_url} in your default web browser...")
@@ -197,9 +207,16 @@ def main() -> None:
         else:
             print(f"[*] Access the web application at: {app_url}")
     else:
-        print(
-            f"[-] Warning: Server took longer than expected to report healthy. You can still access it at {app_url}"
-        )
+        if server_process.poll() is not None:
+            print(
+                f"\n[-] ERROR: Server terminated unexpectedly with exit code {server_process.returncode}.",
+                file=sys.stderr,
+            )
+            sys.exit(server_process.returncode)
+        else:
+            print(
+                f"[-] Warning: Server took longer than expected to report healthy. Access at {app_url}"
+            )
 
     print(
         "\n[i] FarmHand AI is running. Press Ctrl+C at any time to stop the server.\n"
