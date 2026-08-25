@@ -29,7 +29,7 @@ FarmHand AI addresses this gap by running on standard refurbished laptops ($150 
 ---
 
 ### What it Does
-FarmHand AI is an offline, multi-farm management platform powered by a localized Small Language Model (Qwen 2.5 3B GGUF) and domain-specific analytical engines:
+FarmHand AI is an offline, multi-farm management platform powered by a domain-adapted Small Language Model (`qwen_farm_agent`, fine-tuned on a high-fidelity synthetic multi-turn agricultural dataset) and domain-specific analytical engines:
 - **Veterinary Guidance and Local RAG**: Answers livestock and crop health inquiries in **English, Nigerian Pidgin, and Hausa**, referencing 1,397 verified extension chunks from IITA, NAERLS, CGIAR, and FAO.
 - **Linear Programming Feed Optimizer**: Calculates least-cost balanced animal rations across 22 local Nigerian ingredients in under 50 milliseconds, reducing feed costs by 25% to 40% compared to retail commercial feed.
 - **Mortality Anomaly Surveillance**: Uses Scikit-Learn's `IsolationForest` and Median Absolute Deviation (MAD) statistics to flag disease outbreak spikes (>5% herd loss) and generate clinical triage summaries.
@@ -39,7 +39,7 @@ FarmHand AI is an offline, multi-farm management platform powered by a localized
 ---
 
 ### How We Built It
-- **Language Model**: Qwen 2.5 3B Instruct quantized to 4-bit Medium (`Q4_K_M` GGUF), executed through `llama-cpp-python` with 2 physical CPU threads.
+- **Domain-Adapted Language Model**: Fine-tuned Qwen 2.5 on a dedicated 4,000-sample multi-turn synthetic agricultural dataset (generated via Bedrock Mantle / `qwen.qwen3-235b-a22b-2507` teacher model covering single-turn JSON tool-calling, multi-turn parameter elicitation, veterinary RAG reasoning, and domain guardrails). Quantized to 4-bit Medium (`Q4_K_M` GGUF) and executed through `llama-cpp-python` with 2 physical CPU threads.
 - **Hybrid Local Retrieval**: FastEmbed `bge-small-en-v1.5` dense embeddings (FAISS `IndexFlatIP`) combined with `bm25s` sparse lexical retrieval (60% BM25 / 40% dense).
 - **Operations Research Solver**: Constrained Linear Programming optimization using `scipy.optimize.linprog` (HiGHS Interior Point solver).
 - **Epidemiological Anomaly Detection**: Scikit-Learn `IsolationForest` paired with Median Absolute Deviation statistics.

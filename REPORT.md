@@ -16,7 +16,7 @@ Cloud-hosted large language models are impractical in rural farming areas. Farmi
 **FarmHand AI** runs entirely offline. It is an on-device advisory and record-keeping system configured for the **ADTC Standard Laptop** profile (8 GB RAM, Intel Core i5 or i7, integrated graphics, no discrete GPU).
 
 ### Technical Highlights
-- **Inference Engine**: Qwen 2.5 3B Instruct quantized to 4-bit medium (`Q4_K_M` GGUF), running on 2 physical CPU threads without GPU offloading.
+- **Fine-Tuned Domain Model (`qwen_farm_agent`)**: Qwen 2.5 Instruct fine-tuned on a high-fidelity synthetic multi-turn agricultural dataset (4,000+ domain dialogues covering tool-use, parameter elicitation, and clinical extension triage) and quantized to 4-bit medium (`Q4_K_M` GGUF), running on 2 physical CPU threads without GPU offloading.
 - **African Language Support (+15% Alpha Bonus)**: Native instruction handling in Nigerian Pidgin, paired with local bidirectional neural translation for Hausa (`opus-mt-ha-en` / `opus-mt-en-ha`) and an agricultural terminology lexicon.
 - **Cross-Disciplinary Component 1 (Operations Research)**: A constrained Linear Programming solver (`scipy.optimize.linprog`) that computes balanced livestock rations across 22 local Nigerian ingredients in under 50 milliseconds, reducing feed costs by 25% to 40% compared to commercial retail bags.
 - **Cross-Disciplinary Component 2 (Statistical Process Control & ML)**: An anomaly detection module using Scikit-Learn's `IsolationForest`, Median Absolute Deviation (MAD), and deterministic epidemiological rules to detect disease outbreaks from flock mortality records.
@@ -106,11 +106,15 @@ graph TD
     Lang --> UI
 ```
 
-### 3.1 Quantized LLM Engine (`backend/llm_engine.py`)
-- **Model Selection**: Qwen 2.5 3B Instruct provides high parameter efficiency, multilingual fidelity, and consistent tool-calling precision.
-- **Quantization**: `Q4_K_M` GGUF (~1.93 GB disk image), which preserves conversational accuracy while keeping memory usage under 2.0 GB.
-- **Runtime Execution**: `llama_cpp-python` with `n_ctx=4096` and `n_threads=2` (pinned to physical CPU cores to maintain stable thermals).
-- **Prompt Grounding**: The system prompt queries `database.py:get_system_context_summary` at runtime to inject live flock numbers, active species, and recent ledger entries directly into the prompt context, preventing stale inventory estimates.
+### 3.1 Domain-Specific Fine-Tuning & Synthetic Dataset Pipeline
+To adapt Qwen 2.5 into an expert agricultural agent (`qwen_farm_agent`), we engineered a dedicated synthetic dataset generation and Supervised Fine-Tuning (SFT) pipeline:
+- **Teacher Model & Generation Pipeline**: Utilizing `qwen.qwen3-235b-a22b-2507` via Bedrock Mantle ([`scripts/generate_qwen_synthetic.py`](scripts/generate_qwen_synthetic.py)), we synthesized 4,000+ multi-turn agricultural conversational dialogues:
+  1. *Single-Turn Tool Calling (1,500 samples)*: Direct mapping of user farm statements to strict JSON function calls (`write_expenditure`, `register_flock`, `query_knowledge_base`, `get_sensor_data`).
+  2. *Multi-Turn Parameter Elicitation (1,500 samples)*: Conversational follow-up when vital ledger variables (e.g. quantity, amount, species) are missing.
+  3. *Multi-Turn Context & RAG Reasoning (500 samples)*: Complex multi-step agronomic and veterinary Q&A grounded in extension literature.
+  4. *Agricultural Guardrails & Refusals (500 samples)*: Robust boundary alignment refusing out-of-domain queries (politics, entertainment) to maintain strict focus on farm operations.
+- **Fine-Tuning & Quantization**: Fine-tuned using LoRA / SFT with target modules `[q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]`, followed by GGUF conversion and 4-bit medium (`Q4_K_M`) quantization.
+- **Inference Runtime (`backend/llm_engine.py`)**: Executed locally via `llama-cpp-python` with `n_ctx=4096` and `n_threads=2` (pinned to physical CPU cores to eliminate thermal throttling and background task contention). Live flock numbers, active farm species, and ledger totals are dynamically injected from `database.py:get_system_context_summary` at runtime.
 
 ### 3.2 Hybrid Local RAG Engine (`backend/rag_pipeline.py`)
 - **Corpus**: 1,397 verified text chunks extracted from Nigerian agronomic bulletins (IITA, NAERLS, CGIAR, FAO).

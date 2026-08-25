@@ -12,7 +12,7 @@
 **FarmHand AI** is an offline, on-device agricultural advisory and operational management system engineered specifically for the **ADTC Standard Laptop** profile (8 GB RAM, Intel Core i5/i7, integrated graphics, no discrete GPU).
 
 The system combines:
-- A 4-bit quantized Small Language Model (**Qwen 2.5 1.5B / 3B Instruct Q4_K_M GGUF**) running on `llama.cpp` with CPU thread pinning.
+- A domain-adapted Small Language Model (**`qwen_farm_agent`**, fine-tuned on a high-fidelity synthetic multi-turn agricultural dataset and quantized to 4-bit `Q4_K_M` GGUF) running on `llama.cpp` with CPU thread pinning.
 - An **Operations Research Feed Formulation Engine** using Linear Programming (`scipy.optimize.linprog` HiGHS solver across 22 Nigerian raw ingredients).
 - An **Epidemiological Clinical Anomaly Detection Module** (`IsolationForest` + Median Absolute Deviation).
 - A **Hybrid Local Retrieval-Augmented Generation Index** over 1,397 local agricultural extension documents from IITA, NAERLS, CGSpace, and FAO.
@@ -120,8 +120,18 @@ uvicorn --app-dir backend main:app --host 127.0.0.1 --port 8000
 
 ---
 
-## Model Assets & Hugging Face Hub
+## Model Assets & Domain Fine-Tuning
 
+### Domain-Specific Supervised Fine-Tuning (SFT)
+To ensure reliable, deterministic tool use and accurate veterinary guidance on edge CPUs, the base Qwen 2.5 architecture was fine-tuned into **`qwen_farm_agent`** using a specialized 4,000-sample synthetic dataset:
+- **Teacher Model**: Synthesized via `qwen.qwen3-235b-a22b-2507` on Bedrock Mantle ([`scripts/generate_qwen_synthetic.py`](scripts/generate_qwen_synthetic.py)).
+- **Curriculum**:
+  - *Single-Turn Tool Calling (1,500 samples)*: Maps colloquial farm statements directly to valid JSON tool calls (`register_flock`, `write_expenditure`, `query_knowledge_base`).
+  - *Multi-Turn Parameter Elicitation (1,500 samples)*: Conversational clarification when critical transaction variables are omitted.
+  - *Multi-Turn Context & RAG Reasoning (500 samples)*: Multi-step agronomic and veterinary Q&A grounded in extension research.
+  - *Domain Guardrails (500 samples)*: Refusals for out-of-domain queries to maintain operational focus.
+
+### Hugging Face Repository
 Quantized model weights and Modelfiles are hosted on Hugging Face:
 - **Repository:** [https://huggingface.co/matt-wisdom/qwen_farm_agent_gguf](https://huggingface.co/matt-wisdom/qwen_farm_agent_gguf)
 - **Primary GGUF:** `qwen2.5-1.5b-instruct.Q4_K_M.gguf` (~1.0 GB)
