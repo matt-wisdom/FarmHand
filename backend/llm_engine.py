@@ -22,7 +22,8 @@ MODEL_PATH = MODELS_DIR / "qwen2.5-3b-instruct.Q4_K_M.gguf"
 
 # Hardware-scaled CPU threads and full 4k context window
 N_CTX = 4096
-N_THREADS = max(1, os.cpu_count() or 4)
+# Pin to 2 physical threads matching commodity laptop profile and preventing OS contention
+N_THREADS = min(2, os.cpu_count() or 2)
 
 # --- FIX A: minimum similarity score required to trust a RAG hit ---
 # Tune this against your embedding model's actual score distribution. If your
@@ -34,6 +35,57 @@ _llm_instance: Llama | None = None
 _llama_grammar_instance: LlamaGrammar | None = None
 _anti_json_logit_bias: dict[int, float] | None = None
 _english_logit_bias: dict[int, float] | None = None
+
+ROUTER_SPECIES_EXAMPLES: dict[str, str] = {
+    "poultry": (
+        'Farmer: \'I just bought 20 chickens\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 20, "event_type": "purchase", "notes": "bought 20 chickens"}}]\n'
+        'Farmer: \'3 birds died this morning\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 3, "event_type": "mortality", "notes": "3 birds died"}}]\n'
+        'Farmer: \'Spent 18,000 on broiler feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 18000, "description": "broiler feed purchase"}}]\n'
+        'Farmer: \'Chickens have bloody droppings and ruffled feathers\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry chicken coccidiosis bloody droppings ruffled feathers treatment"}}]\n'
+        'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
+        'Farmer: \'how many birds do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "poultry"}}]\n'
+    ),
+    "goat": (
+        'Farmer: \'I just bought 5 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 5, "event_type": "purchase", "notes": "bought 5 goats"}}]\n'
+        'Farmer: \'1 goat died foaming from mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat sudden death foaming mouth poisoning enterotoxemia PPR symptoms emergency care"}}]\n'
+        'Farmer: \'Spent 12,000 on mineral salt lick\' -> [{"function_name": "write_expenditure", "arguments": {"category": "minerals", "amount": 12000, "description": "mineral salt lick purchase"}}]\n'
+        'Farmer: \'Goat has swollen jaw and stiff body\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat stiff body rigid jaw tetanus lockjaw treatment"}}]\n'
+        'Farmer: \'Best concentrate and forage mix for lactating does\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "goat feeding lactation forage legume concentrate crude protein nutrition"}}]\n'
+        'Farmer: \'how many goats do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "goat"}}]\n'
+    ),
+    "fish": (
+        'Farmer: \'Just stocked 500 fingerlings of catfish\' -> [{"function_name": "register_flock", "arguments": {"species": "fish", "count": 500, "event_type": "purchase", "notes": "stocked 500 fingerlings of catfish"}}]\n'
+        'Farmer: \'Fish are dying and floating with red lesions\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "catfish fish mortality floating water surface red sores bacterial disease treatment"}}]\n'
+        'Farmer: \'Spent 45,000 on floating feed pellets\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 45000, "description": "floating feed pellets purchase"}}]\n'
+        'Farmer: \'How to formulate 50kg catfish growout feed\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "catfish_growout", "batch_size_kg": 50}}]\n'
+        'Farmer: \'how many fishes in pond\' -> [{"function_name": "list_animals", "arguments": {"species": "fish"}}]\n'
+    ),
+    "cattle": (
+        'Farmer: \'Bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": "bought 10 cows"}}]\n'
+        'Farmer: \'Calf has shivering and green diarrhea\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "cattle calf diarrhea scours colibacillosis shivering rehydration treatment"}}]\n'
+        'Farmer: \'Spent 30,000 on hay bales\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 30000, "description": "hay bales purchase"}}]\n'
+        'Farmer: \'how many cattle do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "cattle"}}]\n'
+    ),
+    "pig": (
+        'Farmer: \'We added 12 piglets\' -> [{"function_name": "register_flock", "arguments": {"species": "pig", "count": 12, "event_type": "birth", "notes": "added 12 piglets"}}]\n'
+        'Farmer: \'Pigs have high fever and skin discoloration\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "pig swine fever skin blotches mortality biosecurity symptoms treatment"}}]\n'
+        'Farmer: \'Spent 25,000 on grower mash\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 25000, "description": "grower mash purchase"}}]\n'
+        'Farmer: \'how many pigs do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "pig"}}]\n'
+    ),
+    "sheep": (
+        'Farmer: \'I just bought 8 sheep\' -> [{"function_name": "register_flock", "arguments": {"species": "sheep", "count": 8, "event_type": "purchase", "notes": "bought 8 sheep"}}]\n'
+        'Farmer: \'Sheep are limping with swollen hooves\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "sheep foot rot limping swollen hooves antibacterial footbath treatment"}}]\n'
+        'Farmer: \'Spent 15,000 on salt blocks\' -> [{"function_name": "write_expenditure", "arguments": {"category": "minerals", "amount": 15000, "description": "salt blocks purchase"}}]\n'
+        'Farmer: \'how many sheep do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "sheep"}}]\n'
+    ),
+    "general": (
+        'Farmer: \'I just bought 20 chickens\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 20, "event_type": "purchase", "notes": "bought 20 chickens"}}]\n'
+        'Farmer: \'Just acquired 200 fingerlings of tilapia\' -> [{"function_name": "register_flock", "arguments": {"species": "fish", "count": 200, "event_type": "purchase", "notes": "acquired 200 fingerlings of tilapia"}}]\n'
+        'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": "initial count"}}]\n'
+        'Farmer: \'Spent 18,000 on feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 18000, "description": "feed purchase"}}]\n'
+        'Farmer: \'how to treat coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "poultry coccidiosis treatment medication prevention"}}]\n'
+    ),
+}
 
 
 def normalize_language(lang: str | None) -> str:
@@ -69,7 +121,7 @@ def build_tools_json_schema() -> dict[str, Any]:
 
 
 def get_routing_system_prompt(farm_id: str = "default_farm") -> dict[str, str]:
-    """Universal routing prompt with strict animal acquisition vs financial expense fidelity and active farm grounding."""
+    """Universal routing prompt dynamically tailored to the active farm's species."""
     from database import get_farm_by_id, normalize_species_name
 
     farm = get_farm_by_id(farm_id)
@@ -80,6 +132,11 @@ def get_routing_system_prompt(farm_id: str = "default_farm") -> dict[str, str]:
     norm_species = ""
     if farm_type and farm_type.lower() not in ("general", "other", "mixed"):
         norm_species = normalize_species_name(farm_type).lower()
+
+    species_key = norm_species if norm_species in ROUTER_SPECIES_EXAMPLES else "general"
+    examples_block = ROUTER_SPECIES_EXAMPLES.get(
+        species_key, ROUTER_SPECIES_EXAMPLES["general"]
+    )
 
     farm_context_header = (
         "ACTIVE FARM SCOPE & IDENTITY:\n"
@@ -126,23 +183,7 @@ def get_routing_system_prompt(farm_id: str = "default_farm") -> dict[str, str]:
             "- log_farm_observation(species: str, observation: str, category: str): Record background setup memory about farm infrastructure or equipment.\n"
             "- optimize_feed_formulation(target_profile: str, batch_size_kg: float): Calculate least-cost feed formula using Linear Programming.\n"
             "- query_knowledge_base(search_query: str): Search veterinary manuals for illness, symptoms, treatment, drugs, or care guidance.\n\n"
-            "EXAMPLES:\n"
-            'Farmer: \'I just bought 20 chickens\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 20, "event_type": "purchase", "notes": "bought 20 chickens"}}]\n'
-            'Farmer: \'Just acquired 200 fingerlings of tilapia\' -> [{"function_name": "register_flock", "arguments": {"species": "fish", "count": 200, "event_type": "purchase", "notes": "acquired 200 fingerlings of tilapia"}}]\n'
-            'Farmer: \'bought 10 cows\' -> [{"function_name": "register_flock", "arguments": {"species": "cattle", "count": 10, "event_type": "purchase", "notes": "bought 10 cows"}}]\n'
-            'Farmer: \'We currently have 9 goats\' -> [{"function_name": "register_flock", "arguments": {"species": "goat", "count": 9, "event_type": "initial_count", "notes": "initial count"}}]\n'
-            'Farmer: \'3 chickens died this morning\' -> [{"function_name": "register_flock", "arguments": {"species": "poultry", "count": 3, "event_type": "mortality", "notes": "3 chickens died"}}]\n'
-            'Farmer: \'Spent 18,000 on feed\' -> [{"function_name": "write_expenditure", "arguments": {"category": "feed", "amount": 18000, "description": "feed purchase"}}]\n'
-            'Farmer: \'1 animal suddenly died this morning. It was foaming from the mouth\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "'
-            + (norm_species or "poultry")
-            + ' sudden death foaming mouth poisoning symptoms emergency care"}}]\n'
-            'Farmer: \'how to treat coccidiosis\' -> [{"function_name": "query_knowledge_base", "arguments": {"search_query": "'
-            + (norm_species or "poultry")
-            + ' coccidiosis treatment medication prevention"}}]\n'
-            'Farmer: \'How can I mix cheap 100kg feed for my 3-week broilers\' -> [{"function_name": "optimize_feed_formulation", "arguments": {"target_profile": "broiler_starter", "batch_size_kg": 100}}]\n'
-            'Farmer: \'how many animals do i have\' -> [{"function_name": "list_animals", "arguments": {"species": "'
-            + (norm_species or "poultry")
-            + '"}}]\n'
+            f"EXAMPLES:\n{examples_block}"
         ),
     }
 
@@ -581,6 +622,267 @@ def filter_relevant_rag_hits(
     return filtered
 
 
+SYNTHESIS_FEW_SHOTS_EN: dict[tuple[str, str], tuple[str, str]] = {
+    ("poultry", "ledger"): (
+        "Hello, I just bought 20 chickens",
+        "Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger! Your active flock balance is now updated.\n\n"
+        "**Recommended Initial Management Steps**:\n"
+        "1. **Brooding & Warmth**: Ensure the coop is clean, dry, draft-free, and pre-warmed with fresh litter.\n"
+        "2. **Hydration & Anti-Stress**: Provide clean drinking water mixed with vital electrolytes or glucose for the first 24-48 hours.\n"
+        "3. **Nutrition**: Supply high-protein chick starter mash (20-22% crude protein) in easily accessible feeders.",
+    ),
+    ("poultry", "feed"): (
+        "How can I formulate low-cost grower feed for broilers?",
+        "To formulate a low-cost broiler grower feed:\n"
+        "1. Combine local energy sources such as maize or sorghum (50-55%) with protein sources like roasted soybean meal or fish meal (25-30%).\n"
+        "2. Add wheat offal or rice bran (10-15%) for fiber and energy balance.\n"
+        "3. Mix in bone meal (2-3%), limestone (1%), salt (0.3%), and a standard broiler premix with essential vitamins and minerals.",
+    ),
+    ("poultry", "clinical"): (
+        "Chickens have bloody droppings and ruffled feathers. What is the issue?",
+        "Bloody droppings, lethargy, and ruffled feathers in poultry are classic symptoms of acute Coccidiosis, a parasitic infection caused by Eimeria protozoa.\n\n"
+        "**Immediate Action & Treatment**:\n"
+        "1. **Anticoccidial Medication**: Administer water-soluble Amprolium, Toltrazuril, or Sulfaquinoxaline in drinking water immediately.\n"
+        "2. **Litter Hygiene**: Remove wet, caked litter and replace with dry wood shavings to stop oocyst sporulation.\n"
+        "3. **Supportive Care**: Supply electrolytes and Vitamin K to restore hydration and reduce internal bleeding.",
+    ),
+    ("goat", "ledger"): (
+        "I just bought 5 goats",
+        "Successfully recorded the purchase of 5 goats into your herd ledger! Your active herd balance is now updated.\n\n"
+        "**Recommended Initial Management Steps**:\n"
+        "1. **Quarantine**: Keep newly arrived goats in a dedicated quarantine pen for 14-21 days to observe for contagious signs.\n"
+        "2. **Deworming & Checkup**: Administer broad-spectrum anthelmintics (e.g. Albendazole or Ivermectin) and inspect hooves.\n"
+        "3. **Hydration & Forage**: Provide clean water with electrolytes and good-quality grass/legume hay.",
+    ),
+    ("goat", "feed"): (
+        "What is a good low-cost concentrate mix for goats?",
+        "To prepare a balanced low-cost concentrate mix for growing goats (14-16% crude protein):\n"
+        "1. Mix maize offal or crushed sorghum (50%) with dried cassava peels or wheat bran (20%).\n"
+        "2. Add cotton seed cake or roasted soybean meal (25%) for protein.\n"
+        "3. Include bone meal (2%), limestone (1.5%), and iodized mineral salt (1.5%).\n"
+        "4. Always feed alongside clean wilted grasses and legume forage.",
+    ),
+    ("goat", "clinical"): (
+        "My goat suddenly died this morning. It was foaming from the mouth.",
+        "Sudden mortality with frothy foaming from the mouth and respiratory distress typically indicates acute Enterotoxemia (Pulpy Kidney disease caused by Clostridium perfringens), acute plant/chemical poisoning, or acute PPR (Peste des Petits Ruminants).\n\n"
+        "**Immediate Action & Biosecurity**:\n"
+        "1. **Isolate & Carcass Safety**: Safely dispose of or incinerate the carcass to prevent environmental contamination; do not open the intestines.\n"
+        "2. **Herd Inspection**: Check remaining goats immediately for fever, bloat, or lethargy.\n"
+        "3. **Veterinary Care**: Consult a veterinarian for emergency Clostridial vaccination and antibiotic or antitoxin therapy.",
+    ),
+    ("fish", "ledger"): (
+        "Just stocked 500 fingerlings of catfish",
+        "Successfully recorded stocking of 500 catfish fingerlings into your aquaculture inventory! Your active stock balance is now updated.\n\n"
+        "**Recommended Stocking Management Steps**:\n"
+        "1. **Acclimatization**: Float transport bags in pond water for 15-20 minutes to equalize temperature before releasing gently.\n"
+        "2. **Water Quality**: Maintain dissolved oxygen (>5 mg/L), optimal pH (6.5-8.0), and water temperature (26-30°C).\n"
+        "3. **First Feeding**: Let fingerlings rest 12-24 hours before feeding high-protein starter pellets (45% crude protein).",
+    ),
+    ("fish", "feed"): (
+        "How can I formulate growout feed for catfish?",
+        "To formulate catfish growout feed (38-42% crude protein):\n"
+        "1. Mix fish meal (25-30%) with roasted soybean meal (30-35%).\n"
+        "2. Add maize flour or wheat offal (20-25%) for energy and binding.\n"
+        "3. Add fish premix (1%), dicalcium phosphate (2%), vegetable oil (2%), and Vitamin C.",
+    ),
+    ("fish", "clinical"): (
+        "Fish are gasping at the water surface and dying.",
+        "Fish gasping at the water surface indicates severe oxygen depletion (hypoxia), elevated ammonia/nitrite toxicity, or gill parasite infestation.\n\n"
+        "**Immediate Emergency Action**:\n"
+        "1. **Aeration & Water Exchange**: Turn on pond aerators immediately and perform a 30-50% fresh water exchange.\n"
+        "2. **Halt Feeding**: Stop all feeding immediately; uneaten feed consumes oxygen and spikes toxic ammonia.\n"
+        "3. **Water Test**: Test dissolved oxygen, ammonia (TAN), and pH levels immediately.",
+    ),
+    ("cattle", "ledger"): (
+        "Bought 10 cows",
+        "Successfully recorded the addition of 10 cattle into your herd ledger! Your active herd balance is now updated.\n\n"
+        "**Recommended Initial Management Steps**:\n"
+        "1. **Quarantine & Acclimation**: Isolate new cattle for 21 days with clean water, quality dry forage, and shade.\n"
+        "2. **Vaccination & Deworming**: Check vaccination history (CBPP, Blackleg, FMD) and administer broad-spectrum dewormers.\n"
+        "3. **Biosecurity**: Inspect for external ticks and apply acaricide dip or pour-on treatment.",
+    ),
+    ("cattle", "feed"): (
+        "How to formulate cheap cattle fattening feed?",
+        "To formulate a balanced beef cattle fattening ration (12-14% crude protein):\n"
+        "1. Combine crushed maize or sorghum grain (45-50%) with wheat bran or rice polishing (25%).\n"
+        "2. Add cotton seed cake or groundnut cake (18-20%) for protein.\n"
+        "3. Add bone meal (2%), limestone (1%), and mineral salt (1.5%). Supply alongside hay or silage.",
+    ),
+    ("cattle", "clinical"): (
+        "Calves have sudden shivering and watery green diarrhea.",
+        "Sudden shivering and profuse watery green diarrhea in young calves typically indicate acute colibacillosis (E. coli scours) or acute coccidiosis.\n\n"
+        "**Immediate Action & Management**:\n"
+        "1. **Rehydration**: Administer warm oral electrolyte rehydration solutions immediately to prevent lethal dehydration.\n"
+        "2. **Isolation & Warmth**: Move affected calves to a clean, dry, disinfected pen with fresh bedding.\n"
+        "3. **Veterinary Care**: Consult your veterinarian for appropriate antimicrobial therapy and fluid management.",
+    ),
+    ("pig", "ledger"): (
+        "We added 12 piglets",
+        "Successfully recorded the birth/addition of 12 piglets into your swine ledger! Your active herd count is now updated.\n\n"
+        "**Recommended Initial Care**:\n"
+        "1. **Warmth & Creep Area**: Ensure creep area temperature is 30-32°C using heating lamps to prevent chilling.\n"
+        "2. **Iron Injection**: Administer intramuscular iron dextran injection at 3 days of age to prevent anemia.\n"
+        "3. **Colostrum**: Ensure all piglets nurse colostrum within the first 6 hours of birth.",
+    ),
+    ("pig", "feed"): (
+        "How to mix pig grower mash?",
+        "To formulate pig grower mash (16-18% crude protein):\n"
+        "1. Mix maize or cassava meal (50-55%) with wheat offal or rice bran (15-20%).\n"
+        "2. Add soybean meal or fish meal (22-25%) for balanced amino acids.\n"
+        "3. Mix in bone meal (2.5%), limestone (1%), salt (0.5%), and swine grower premix.",
+    ),
+    ("pig", "clinical"): (
+        "Pigs have high fever and purple blotches on skin.",
+        "High fever with cyanotic purple discoloration on ears and abdomen indicates acute African Swine Fever (ASF) or Erysipelas.\n\n"
+        "**Immediate Biosecurity Action**:\n"
+        "1. **Strict Quarantine**: Isolate affected pens immediately; restrict all personnel and vehicle movement.\n"
+        "2. **Disinfection**: Apply broad-spectrum disinfectant footbaths at all entrances.\n"
+        "3. **Notify Vet**: Contact veterinary authorities immediately for diagnostic confirmation.",
+    ),
+    ("sheep", "ledger"): (
+        "I just bought 8 sheep",
+        "Successfully recorded the purchase of 8 sheep into your flock ledger! Your active flock count is now updated.\n\n"
+        "**Recommended Initial Steps**:\n"
+        "1. **Quarantine**: Isolate new sheep for 14-21 days before joining the main flock.\n"
+        "2. **Deworming & Foot Inspection**: Administer broad-spectrum anthelmintic and trim/inspect hooves for foot rot.\n"
+        "3. **Hydration & Mineral Salt**: Provide clean drinking water and mineral salt licks.",
+    ),
+    ("sheep", "feed"): (
+        "What is a good low-cost sheep feed mix?",
+        "To mix balanced sheep maintenance and growth feed (12-14% crude protein):\n"
+        "1. Combine maize bran or sorghum offal (55%) with dried brewers grain or wheat offal (20%).\n"
+        "2. Add cotton seed cake or soybean meal (20%).\n"
+        "3. Add dicalcium phosphate (2%), limestone (1.5%), and sheep mineral salt (1.5%). Feed with good pasture.",
+    ),
+    ("sheep", "clinical"): (
+        "Sheep are limping with foul-smelling hooves.",
+        "Severe limping accompanied by foul odor and separation of the hoof horn indicates contagious Foot Rot (caused by Dichelobacter nodosus and Fusobacterium necrophorum).\n\n"
+        "**Immediate Treatment & Care**:\n"
+        "1. **Foot Trimming**: Carefully pare away necrotic, dead hoof horn to expose the infection to air.\n"
+        "2. **Footbath**: Walk sheep through a 10% zinc sulfate or 5% copper sulfate footbath.\n"
+        "3. **Dry Environment**: Move sheep to clean, dry pasture or housing; isolate severely affected animals.",
+    ),
+    ("general", "ledger"): (
+        "Hello, I just bought 20 chickens",
+        "Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger! Your active flock balance is now updated.\n\n"
+        "**Recommended Initial Management Steps**:\n"
+        "1. **Brooding & Warmth**: Ensure the coop is clean, dry, draft-free, and pre-warmed with fresh litter.\n"
+        "2. **Hydration & Anti-Stress**: Provide clean drinking water mixed with vital electrolytes or glucose for the first 24-48 hours.\n"
+        "3. **Nutrition**: Supply high-protein chick starter mash (20-22% crude protein) in easily accessible feeders.",
+    ),
+    ("general", "feed"): (
+        "How can I formulate low-cost grower feed for broilers?",
+        "To formulate a low-cost broiler grower feed:\n"
+        "1. Combine local energy sources such as maize or sorghum (50-55%) with protein sources like roasted soybean meal or fish meal (25-30%).\n"
+        "2. Add wheat offal or rice bran (10-15%) for fiber and energy balance.\n"
+        "3. Mix in bone meal (2-3%), limestone (1%), salt (0.3%), and a standard broiler premix with essential vitamins and minerals.",
+    ),
+    ("general", "clinical"): (
+        "What causes sudden shivering and green diarrhea in young animals?",
+        "Sudden shivering and watery green diarrhea typically indicate acute bacterial scours (E. coli / Salmonella) or coccidiosis.\n\n"
+        "**Immediate Action & Management**:\n"
+        "1. **Rehydration**: Administer warm oral electrolyte rehydration solutions immediately to prevent lethal dehydration.\n"
+        "2. **Isolation & Warmth**: Move affected animals to a clean, dry, disinfected pen with fresh bedding.\n"
+        "3. **Veterinary Care**: Consult your veterinarian for appropriate antimicrobial therapy and fluid management.",
+    ),
+}
+
+SYNTHESIS_FEW_SHOTS_PCM: dict[tuple[str, str], tuple[str, str]] = {
+    ("poultry", "ledger"): (
+        "Hello, I just bought 20 chickens",
+        "I don record the 20 new chickens inside your flock ledger successfully! Your total bird count don update now.\n\n"
+        "**Quick advice for the new birds**:\n"
+        "1. **Warm Pen**: Put them for clean, warm pen with fresh wood shavings make cold no catch them.\n"
+        "2. **Clean Water**: Give them clean water with anti-stress vitamins make them relax after transport.\n"
+        "3. **Good Feed**: Give them quality chick starter feed make them grow quick-quick.",
+    ),
+    ("poultry", "feed"): (
+        "How I fit mix feed for broiler?",
+        "To mix good broiler feed:\n"
+        "1. Mix maize or guinea corn (50-55%) with roasted soybean meal or fish meal (25-30%) for high protein.\n"
+        "2. Add wheat offal or rice bran (10-15%) to give energy and fiber.\n"
+        "3. Add bone meal (2-3%), limestone (1%), salt, and broiler premix.",
+    ),
+    ("poultry", "clinical"): (
+        "Chickens dey pass blood for poo-poo and their feather rough.",
+        "Bloody poo-poo and rough feathers na classic sign of Coccidiosis sickness caused by small parasites inside intestine.\n\n"
+        "**Wetin you suppose do quick-quick**:\n"
+        "1. **Medicine**: Put Amprolium, Toltrazuril, or Sulfaquinoxaline inside their drinking water immediately.\n"
+        "2. **Clean Shavings**: Pack comot wet litter and put dry fresh wood shavings.\n"
+        "3. **Vitamins**: Give them Vitamin K and electrolytes make bleeding stop and body strong.",
+    ),
+    ("goat", "ledger"): (
+        "I just buy 5 goats",
+        "I don record the 5 new goats inside your flock ledger successfully! Your total goat count don update now.\n\n"
+        "**Quick care for new goats**:\n"
+        "1. **Separate Pen**: Keep them for separate pen for 2-3 weeks make you observe them first.\n"
+        "2. **Deworming**: Give them dewormer medicine like Albendazole or Ivermectin.\n"
+        "3. **Water & Grass**: Give them clean water with electrolytes and sweet dry grass.",
+    ),
+    ("goat", "feed"): (
+        "How I fit mix cheap feed for goats?",
+        "To mix good low-cost goat feed:\n"
+        "1. Mix maize offal or crushed guinea corn (50%) with dried cassava peel or wheat offal (20%).\n"
+        "2. Add cotton seed cake or roasted soya meal (25%) for protein.\n"
+        "3. Add bone meal (2%), limestone (1.5%), and salt (1.5%). Feed with fresh grass.",
+    ),
+    ("goat", "clinical"): (
+        "My goat dey cough well-well and fever dey hold am with running nose.",
+        "Possible cause na contagious viral sickness like PPR (Peste des Petits Ruminants) or acute respiratory infection.\n\n"
+        "**Wetin you suppose do quick-quick**:\n"
+        "1. **Isolate**: Separate the sick goat immediately make e no infect other goats for pen.\n"
+        "2. **Warmth & Water**: Keep the pen warm, dry, and provide clean water.\n"
+        "3. **Call Vet**: Call veterinary doctor make them give proper antibiotics and supportive care.",
+    ),
+    ("fish", "ledger"): (
+        "Just stocked 500 fingerlings of catfish",
+        "I don record the 500 catfish fingerlings inside your pond ledger successfully! Your total fish count don update now.\n\n"
+        "**Important steps for new fingerlings**:\n"
+        "1. **Acclimatization**: Float the nylon bag inside pond water for 15-20 minutes before pouring them gently.\n"
+        "2. **Good Water**: Make sure say water clean and oxygen plenty.\n"
+        "3. **Feeding**: Allow them rest for 12 hours before giving them small starter floating feed (45% protein).",
+    ),
+    ("fish", "feed"): (
+        "How I fit mix catfish feed?",
+        "To mix catfish feed:\n"
+        "1. Mix fish meal (30%) with roasted soybean meal (30%).\n"
+        "2. Add maize flour or wheat offal (25%) for energy and make e bind.\n"
+        "3. Add fish premix (1%), bone meal/DCP (2%), vegetable oil (2%), and Vitamin C.",
+    ),
+    ("fish", "clinical"): (
+        "Fish dey die and come up for water surface.",
+        "Fish coming to water surface to breathe means oxygen don drop well-well or ammonia water pollution don high.\n\n"
+        "**Emergency steps**:\n"
+        "1. **Pumping & Fresh Water**: Pump fresh clean water inside pond and exchange 30-50% of the bad water immediately.\n"
+        "2. **Stop Feeding**: No give them feed at all today make water no spoil more.\n"
+        "3. **Check Aeration**: Put aerator or fountain make air enter the water.",
+    ),
+    ("general", "ledger"): (
+        "Hello, I just bought 20 chickens",
+        "I don record the 20 new chickens inside your flock ledger successfully! Your total bird count don update now.\n\n"
+        "**Quick advice for the new birds**:\n"
+        "1. **Warm Pen**: Put them for clean, warm pen with fresh wood shavings make cold no catch them.\n"
+        "2. **Clean Water**: Give them clean water with anti-stress vitamins make them relax after transport.\n"
+        "3. **Good Feed**: Give them quality chick starter feed make them grow quick-quick.",
+    ),
+    ("general", "feed"): (
+        "How I fit mix feed for broiler?",
+        "To mix good broiler feed:\n"
+        "1. Mix maize or guinea corn (50-55%) with roasted soybean meal or fish meal (25-30%) for high protein.\n"
+        "2. Add wheat offal or rice bran (10-15%) to give energy and fiber.\n"
+        "3. Add bone meal (2-3%), limestone (1%), salt, and broiler premix.",
+    ),
+    ("general", "clinical"): (
+        "My goat dey cough well-well and fever dey hold am with running nose.",
+        "Possible cause na contagious viral sickness like PPR (Peste des Petits Ruminants) or acute respiratory infection.\n\n"
+        "**Wetin you suppose do quick-quick**:\n"
+        "1. **Isolate**: Separate the sick animal immediately make e no infect others.\n"
+        "2. **Warmth & Water**: Keep the pen warm, dry, and provide clean water.\n"
+        "3. **Call Vet**: Call veterinary doctor make them give proper antibiotics and supportive care.",
+    ),
+}
+
+
 def generate_stateless_answer(
     llm: Llama,
     context_data: str,
@@ -590,14 +892,42 @@ def generate_stateless_answer(
     messages: list[dict[str, str]] | None = None,
     stream: bool = False,
 ):
-    """Pass 3: Natural language synthesis using strictly positive prompting and API Chat Wrapper."""
+    """Pass 3: Fast natural language synthesis with dynamic 1-shot species selection (~800 tokens)."""
 
     # Budget context length to prevent exceeding token limits
     safe_context = (
-        context_data[:2500].strip()
+        context_data[:2000].strip()
         if context_data
         else "No additional reference documents found."
     )
+
+    # Resolve target species from db_summary
+    target_species = "general"
+    if "Target Species Scope:" in db_summary:
+        sp_match = re.search(r"Target Species Scope:\s*([A-Za-z]+)", db_summary)
+        if sp_match:
+            cand = sp_match.group(1).strip().lower()
+            if cand in ["poultry", "goat", "fish", "cattle", "pig", "sheep"]:
+                target_species = cand
+
+    # Classify synthesis intent
+    q_lower = user_question.lower()
+    if any(
+        k in safe_context
+        for k in [
+            "FLOCK REGISTRATION RESULT",
+            "EXPENDITURE RECORDED RESULT",
+            "FARM FLOCK INVENTORY QUERY RESULT",
+            "FARM EXPENDITURES QUERY RESULT",
+        ]
+    ):
+        intent = "ledger"
+    elif "FEED FORMULATION" in safe_context or any(
+        w in q_lower for w in ["feed", "formulat", "mash", "ration", "mix", "diet"]
+    ):
+        intent = "feed"
+    else:
+        intent = "clinical"
 
     if norm_lang == "pidgin":
         system_prompt = (
@@ -608,53 +938,32 @@ def generate_stateless_answer(
             "INSTRUCTIONS:\n"
             "- Directly and accurately answer the farmer's question or acknowledge ledger entries.\n"
             "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
-            "  * Follow the active farm species scope shown above. When the species is not specified by the farmer, tailor advice to the active farm's species. When the farmer names a specific animal (e.g. goats, chickens, cattle, fish, pigs, sheep), always provide advice for that requested animal.\n"
-            "  * If REFERENCE KNOWLEDGE BASE has FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
-            "    1. Confirm that the entry is recorded in the ledger (e.g. 'I don record the 20 new chickens inside your flock ledger successfully!').\n"
-            "    2. Provide 2-3 quick, high-value initial care tips for the animals (e.g. clean warm pen, anti-stress water, starter feed).\n"
-            "    3. Do NOT invent unprompted disease diagnoses or jump to unrelated animals when the farmer is just adding new animals.\n"
-            "- For feeding & nutrition: explain ingredients, protein needs, local substitutes (e.g. rice bran, fish meal), and preparation steps.\n"
-            "- For diseases & symptoms: evaluate symptoms against reference documents, name suspected conditions (e.g. PPR, enterotoxemia/pulpy kidney, plant/chemical poisoning), give supportive first aid, and advise calling a vet.\n"
+            f"  * Tailor responses to the target species of the active farm profile ({target_species}). When the farmer explicitly names another animal, answer for that requested animal.\n"
+            "  * When REFERENCE KNOWLEDGE BASE has FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
+            "    1. Confirm that the entry is recorded in the ledger clearly.\n"
+            "    2. Provide 2-3 quick, high-value initial care tips for the animals.\n"
+            "    3. Do NOT invent unprompted disease diagnoses or jump to unrelated animals when the farmer is just recording new animals.\n"
+            "- For feeding & nutrition: explain ingredients, protein needs, local substitutes, and preparation steps.\n"
+            "- For diseases & symptoms: evaluate symptoms against reference documents, name suspected conditions, give supportive first aid, and advise calling a vet.\n"
             "- NEVER output placeholder promises like 'I will log this now', 'I am logging...', 'I go log am now', or 'I go help you record...'. Provide immediate confirmation or clinical advice directly."
         )
         prefill = ""
 
-        pidgin_few_shot_1_user = (
-            "My goat dey cough well-well and fever dey hold am with running nose."
-        )
-        pidgin_few_shot_1_assistant = (
-            "Possible cause na contagious viral sickness like PPR (Peste des Petits Ruminants) or acute respiratory infection.\n\n"
-            "Wetin you suppose do quick-quick:\n"
-            "1. Isolate the sick goat immediately make e no infect other goats for pen.\n"
-            "2. Keep the pen warm, dry, and provide clean water.\n"
-            "3. Call veterinary doctor make them give proper antibiotics and supportive care."
-        )
-
-        pidgin_few_shot_2_user = "How I fit mix feed for broiler?"
-        pidgin_few_shot_2_assistant = (
-            "To mix good broiler feed:\n"
-            "1. Mix maize or guinea corn (50-55%) with roasted soybean meal or fish meal (25-30%) for high protein.\n"
-            "2. Add wheat offal or rice bran (10-15%) to give energy and fiber.\n"
-            "3. Add bone meal (2-3%), limestone (1%), salt, and broiler premix."
-        )
-
-        pidgin_few_shot_3_user = "Hello, I just bought 20 chickens"
-        pidgin_few_shot_3_assistant = (
-            "I don record the 20 new chickens inside your flock ledger successfully! Your total bird count don update now.\n\n"
-            "**Quick advice for the new birds**:\n"
-            "1. **Warm Pen**: Put them for clean, warm pen with fresh wood shavings make cold no catch them.\n"
-            "2. **Clean Water**: Give them clean water with anti-stress vitamins make them relax after transport.\n"
-            "3. **Good Feed**: Give them quality chick starter feed make them grow quick-quick."
+        few_shot_tuple = SYNTHESIS_FEW_SHOTS_PCM.get(
+            (target_species, intent),
+            SYNTHESIS_FEW_SHOTS_PCM.get(
+                (target_species, "clinical"),
+                SYNTHESIS_FEW_SHOTS_PCM.get(
+                    ("general", intent),
+                    SYNTHESIS_FEW_SHOTS_PCM[("general", "clinical")],
+                ),
+            ),
         )
 
         chatml_parts = [
             f"<|im_start|>system\n{system_prompt}<|im_end|>",
-            f"<|im_start|>user\n{pidgin_few_shot_1_user}<|im_end|>",
-            f"<|im_start|>assistant\n{pidgin_few_shot_1_assistant}<|im_end|>",
-            f"<|im_start|>user\n{pidgin_few_shot_2_user}<|im_end|>",
-            f"<|im_start|>assistant\n{pidgin_few_shot_2_assistant}<|im_end|>",
-            f"<|im_start|>user\n{pidgin_few_shot_3_user}<|im_end|>",
-            f"<|im_start|>assistant\n{pidgin_few_shot_3_assistant}<|im_end|>",
+            f"<|im_start|>user\n{few_shot_tuple[0]}<|im_end|>",
+            f"<|im_start|>assistant\n{few_shot_tuple[1]}<|im_end|>",
         ]
     else:
         system_prompt = (
@@ -666,58 +975,35 @@ def generate_stateless_answer(
             "INSTRUCTIONS:\n"
             "- Directly and accurately answer the farmer's specific question or confirm ledger updates in natural, clear sentences.\n"
             "- GROUNDING IN ACTIVE FARM SCOPE & LEDGER ACTIONS:\n"
-            "  * Tailor responses to the target species of the active farm profile shown above when the user does not specify an animal. When the farmer explicitly mentions a specific animal (e.g. goats, chickens, cattle, fish, pigs, sheep), always answer for that requested animal.\n"
+            f"  * Tailor responses to the target species of the active farm profile ({target_species}). When the farmer explicitly mentions a specific animal, always answer for that requested animal.\n"
             "  * When REFERENCE KNOWLEDGE BASE contains a FLOCK REGISTRATION RESULT or EXPENDITURE RECORDED RESULT:\n"
-            "    1. Confirm the transaction clearly (e.g. 'Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger. Your total flock balance is now updated.').\n"
+            "    1. Confirm the transaction clearly with the exact animal/item recorded.\n"
             "    2. Provide 2-3 concise, practical next steps (e.g. brooding warmth, clean water with anti-stress vitamins, starter feed).\n"
             "    3. Do NOT invent unprompted disease symptoms or jump to unrelated animal species when acknowledging a standard animal purchase or headcount addition.\n"
             "    4. NEVER say 'I can record this if you like' when the record is already logged in the database.\n"
-            "- For disease names, overviews, or 'what is' questions (e.g. 'tetanus in goats', 'what is tetanus', 'coccidiosis in poultry'): Directly provide a comprehensive, accurate explanation. Always state what the disease is, its causative pathogen (bacteria, virus, or parasite), mode of transmission/infection (e.g. soil bacteria entering puncture wounds), key clinical symptoms (e.g. muscle stiffness, lockjaw, rigid posture), and prevention/control before veterinary care.\n"
-            "- For clinical symptoms / sudden death queries (e.g. sudden mortality, foaming from mouth, respiratory distress, scours): Identify the probable suspect diseases based on reference documents (e.g. Enterotoxemia / Pulpy Kidney, acute poisoning/chemical toxin, or acute PPR), explain why, and provide immediate biosecurity and supportive action steps.\n"
+            "- For disease names, overviews, or 'what is' questions: Directly provide a comprehensive, accurate explanation (pathogen, transmission, key symptoms, prevention/control).\n"
+            "- For clinical symptoms / sudden death queries: Identify the probable suspect diseases based on reference documents, explain why, and provide immediate biosecurity and supportive action steps.\n"
             "- NEVER ask questions about database tags, pen numbers, or technical IDs during a medical/symptom inquiry. Focus directly on clinical triage and supportive care.\n"
             "- For feeding, formulations, recipes, or multi-step procedures: Detail practical ingredients, crude protein percentages, local substitutes, and preparation steps clearly.\n"
-            "- If reference excerpts focus on a specific procedure (e.g. castration or wound care), still provide the full, direct answer to the farmer's disease question.\n"
             "- Do NOT output JSON or function calls.\n"
             "- NEVER output placeholder promises (e.g. do NOT say 'I will log this now', 'I am recording this now', 'I go help you...', or 'I will guide you through the steps'). Provide your complete diagnostic response immediately."
         )
         prefill = ""
 
-        few_shot_1_user = (
-            "What causes sudden shivering and green diarrhea in young calves?"
-        )
-        few_shot_1_assistant = (
-            "Sudden shivering and profuse watery green diarrhea in young calves typically indicate acute colibacillosis (E. coli scours) or acute coccidiosis.\n\n"
-            "**Immediate Action & Management**:\n"
-            "1. **Rehydration**: Administer warm oral electrolyte rehydration solutions immediately to prevent lethal dehydration.\n"
-            "2. **Isolation & Warmth**: Move affected calves to a clean, dry, disinfected pen with fresh bedding.\n"
-            "3. **Veterinary Care**: Consult your veterinarian for appropriate antimicrobial therapy and fluid management."
-        )
-
-        few_shot_2_user = "How can I formulate low-cost grower feed for broilers?"
-        few_shot_2_assistant = (
-            "To formulate a low-cost broiler grower feed:\n"
-            "1. Combine local energy sources such as maize or sorghum (50-55%) with protein sources like roasted soybean meal or fish meal (25-30%).\n"
-            "2. Add wheat offal or rice bran (10-15%) for fiber and energy balance.\n"
-            "3. Mix in bone meal (2-3%), limestone (1%), salt (0.3%), and a standard broiler premix with essential vitamins and minerals."
-        )
-
-        few_shot_3_user = "Hello, I just bought 20 chickens"
-        few_shot_3_assistant = (
-            "Successfully recorded the purchase of 20 chickens (Poultry) into your flock ledger! Your active flock balance is now updated.\n\n"
-            "**Recommended Initial Management Steps**:\n"
-            "1. **Brooding & Warmth**: Ensure the coop is clean, dry, draft-free, and pre-warmed with fresh litter.\n"
-            "2. **Hydration & Anti-Stress**: Provide clean drinking water mixed with vital electrolytes or glucose for the first 24-48 hours.\n"
-            "3. **Nutrition**: Supply high-protein chick starter mash (20-22% crude protein) in easily accessible feeders."
+        few_shot_tuple = SYNTHESIS_FEW_SHOTS_EN.get(
+            (target_species, intent),
+            SYNTHESIS_FEW_SHOTS_EN.get(
+                (target_species, "clinical"),
+                SYNTHESIS_FEW_SHOTS_EN.get(
+                    ("general", intent), SYNTHESIS_FEW_SHOTS_EN[("general", "clinical")]
+                ),
+            ),
         )
 
         chatml_parts = [
             f"<|im_start|>system\n{system_prompt}<|im_end|>",
-            f"<|im_start|>user\n{few_shot_1_user}<|im_end|>",
-            f"<|im_start|>assistant\n{few_shot_1_assistant}<|im_end|>",
-            f"<|im_start|>user\n{few_shot_2_user}<|im_end|>",
-            f"<|im_start|>assistant\n{few_shot_2_assistant}<|im_end|>",
-            f"<|im_start|>user\n{few_shot_3_user}<|im_end|>",
-            f"<|im_start|>assistant\n{few_shot_3_assistant}<|im_end|>",
+            f"<|im_start|>user\n{few_shot_tuple[0]}<|im_end|>",
+            f"<|im_start|>assistant\n{few_shot_tuple[1]}<|im_end|>",
         ]
 
     # Build ChatML history
@@ -925,21 +1211,26 @@ def chat_completion(
                 "[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise."
             )
 
-    # Inject semantically matching farm memories into RAG context
-    try:
-        import farm_memory
+    # Inject semantically matching farm memories into RAG context only for knowledge/conversational queries
+    if not is_tool_call or any(
+        c.get("function_name") == "query_knowledge_base" for c in tool_calls
+    ):
+        try:
+            import farm_memory
 
-        matching_mems = farm_memory.search_farm_memories(
-            farm_id=farm_id, query=current_query_en, top_k=3
-        )
-        if matching_mems:
-            mem_block = farm_memory.format_memories_for_rag(matching_mems)
-            rag_context = f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
-            print(
-                f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context."
+            matching_mems = farm_memory.search_farm_memories(
+                farm_id=farm_id, query=current_query_en, top_k=3
             )
-    except Exception as e:
-        print(f"[llm_engine] Semantic memory retrieval notice: {e}")
+            if matching_mems:
+                mem_block = farm_memory.format_memories_for_rag(matching_mems)
+                rag_context = (
+                    f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
+                )
+                print(
+                    f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context."
+                )
+        except Exception as e:
+            print(f"[llm_engine] Semantic memory retrieval notice: {e}")
 
     # Step 5: SYNTHESIS / RESULT DISPATCH
     if rag_context:
@@ -1094,6 +1385,7 @@ def chat_completion_stream(
     ]
     grammar = get_llama_grammar()
 
+    t_pass1_start = time.time()
     print("[llm_engine] Running Pass 1 (Router)...")
     response_pass1 = llm.create_chat_completion(
         messages=routing_messages,
@@ -1102,6 +1394,7 @@ def chat_completion_stream(
         grammar=grammar,
         stop=["<|im_end|>", "<|im_start|>"],
     )
+    t_pass1 = time.time() - t_pass1_start
 
     text_pass1 = response_pass1["choices"][0]["message"]["content"].strip()
     is_tool_call, tool_calls = parse_tool_calls(text_pass1)
@@ -1109,6 +1402,7 @@ def chat_completion_stream(
     # Step 4: Execute Tools
     tool_results = []
     rag_context = ""
+    t_tools_start = time.time()
 
     if is_tool_call:
         for call in tool_calls:
@@ -1143,21 +1437,28 @@ def chat_completion_stream(
                 "[llm_engine] No RAG hits cleared the relevance floor; will not synthesize from noise."
             )
 
-    # Inject semantically matching farm memories into RAG context
-    try:
-        import farm_memory
+    t_tools = time.time() - t_tools_start
 
-        matching_mems = farm_memory.search_farm_memories(
-            farm_id=farm_id, query=current_query_en, top_k=3
-        )
-        if matching_mems:
-            mem_block = farm_memory.format_memories_for_rag(matching_mems)
-            rag_context = f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
-            print(
-                f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context."
+    # Inject semantically matching farm memories into RAG context only for knowledge/conversational queries
+    if not is_tool_call or any(
+        c.get("function_name") == "query_knowledge_base" for c in tool_calls
+    ):
+        try:
+            import farm_memory
+
+            matching_mems = farm_memory.search_farm_memories(
+                farm_id=farm_id, query=current_query_en, top_k=3
             )
-    except Exception as e:
-        print(f"[llm_engine] Semantic memory retrieval notice: {e}")
+            if matching_mems:
+                mem_block = farm_memory.format_memories_for_rag(matching_mems)
+                rag_context = (
+                    f"{mem_block}\n\n{rag_context}" if rag_context else mem_block
+                )
+                print(
+                    f"[llm_engine] Injected {len(matching_mems)} semantic farm memories into RAG context."
+                )
+        except Exception as e:
+            print(f"[llm_engine] Semantic memory retrieval notice: {e}")
 
     # Step 5: SYNTHESIS / RESULT DISPATCH
     target_context = (
@@ -1165,6 +1466,8 @@ def chat_completion_stream(
         if rag_context
         else (format_database_tool_context(tool_results) if tool_results else "")
     )
+
+    first_token_emitted = False
 
     if norm_lang == "hausa":
         # For Hausa: generate English and translate
@@ -1192,7 +1495,7 @@ def chat_completion_stream(
             yield ha_translated
     else:
         # Stream tokens directly for English / Pidgin
-        yield from generate_stateless_answer(
+        for chunk in generate_stateless_answer(
             llm,
             target_context,
             current_query_en,
@@ -1200,7 +1503,14 @@ def chat_completion_stream(
             farm_summary,
             messages=messages,
             stream=True,
-        )
+        ):
+            if not first_token_emitted:
+                first_token_emitted = True
+                ttft = time.time() - turn_start
+                print(
+                    f"[llm_engine] [timing] Pass 1: {t_pass1:.2f}s | Tools: {t_tools:.2f}s | TTFT: {ttft:.2f}s"
+                )
+            yield chunk
 
     total_time = time.time() - turn_start
     print(f"[llm_engine] TOTAL TURN STREAM TIME: {total_time:.2f}s\n")
